@@ -1,79 +1,144 @@
 # x-reader
 
-Universal content reader — fetch, normalize, and digest content from 7+ platforms.
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-## Supported Platforms
+Universal content reader — fetch, transcribe, and digest content from any platform.
 
-| Platform | Method |
-|----------|--------|
-| WeChat (微信公众号) | Jina Reader |
-| Telegram | Telethon API |
-| X / Twitter | Jina Reader |
-| YouTube | Jina Reader |
-| Bilibili (B站) | Official API |
-| Xiaohongshu (小红书) | Jina Reader |
-| RSS | feedparser |
-| Any web page | Jina Reader (fallback) |
+Give it a URL (article, video, podcast, tweet), get back structured content. Works as CLI, Python library, MCP server, or Claude Code skills.
 
-## Install
+## What It Does
 
-```bash
-pip install x-reader
+```
+Any URL → Platform Detection → Fetch Content → Unified Output
+              ↓                      ↓
+         auto-detect           text: Jina Reader
+         7+ platforms          video: yt-dlp subtitles
+                               audio: Whisper transcription
+                               API: Bilibili / RSS / Telegram
 ```
 
-With Telegram support:
-```bash
-pip install "x-reader[telegram]"
-```
+For video and podcast content, the Python layer handles metadata + subtitles. The **Claude Code skills** (optional) take it further — full Whisper transcription + AI-powered summary reports.
 
-## Quick Start
+## Three Layers
+
+x-reader is composable. Use the layers you need:
+
+| Layer | What | Format | Install |
+|-------|------|--------|---------|
+| **Python CLI/Library** | Basic content fetching + unified schema | `pip install x-reader` | Required |
+| **Claude Code Skills** | Video transcription + AI analysis | Copy `skills/` to `~/.claude/skills/` | Optional |
+| **MCP Server** | Expose reading as MCP tools | `python mcp_server.py` | Optional |
+
+### Layer 1: Python CLI
 
 ```bash
-# Fetch a single URL
+# Fetch any URL
 x-reader https://mp.weixin.qq.com/s/abc123
 
 # Fetch a tweet
 x-reader https://x.com/elonmusk/status/123456
 
-# Fetch a Bilibili video
-x-reader https://www.bilibili.com/video/BV1xx411c7XW
-
-# Fetch a Xiaohongshu note
-x-reader https://www.xiaohongshu.com/explore/abc123
-
-# Fetch multiple URLs at once
+# Fetch multiple URLs
 x-reader https://url1.com https://url2.com
 
 # View inbox
 x-reader list
 ```
 
-## How It Works
+### Layer 2: Claude Code Skills
+
+For video/podcast transcription and content analysis:
 
 ```
-URL → Platform Detection → Fetcher → Unified Schema → Inbox (JSON + Markdown)
+skills/
+├── video/       # YouTube/Bilibili/podcast → full transcript via Whisper
+└── analyzer/    # Any content → structured analysis report
 ```
 
-1. **Platform Detection** — auto-detects which platform a URL belongs to
-2. **Fetcher** — uses the best method for each platform (API, Jina Reader, feedparser)
-3. **Unified Schema** — normalizes all content into one format (`UnifiedContent`)
-4. **Dual Output** — saves to `unified_inbox.json` (for AI) and optional Markdown (for you)
+Install:
+```bash
+cp -r skills/video ~/.claude/skills/video
+cp -r skills/analyzer ~/.claude/skills/analyzer
+```
 
-## Configuration
+Then in Claude Code, just send a YouTube/Bilibili/podcast link — the video skill auto-triggers and produces a full transcript + summary.
 
-Copy `.env.example` to `.env` and fill in your values:
+### Layer 3: MCP Server
 
 ```bash
-cp .env.example .env
+pip install "x-reader[mcp]"
+python mcp_server.py
 ```
 
-Required for Telegram only:
-- `TG_API_ID` — from https://my.telegram.org
-- `TG_API_HASH` — from https://my.telegram.org
+Tools exposed:
+- `read_url(url)` — fetch any URL
+- `read_batch(urls)` — fetch multiple URLs concurrently
+- `list_inbox()` — view previously fetched content
+- `detect_platform(url)` — identify platform from URL
 
-Optional:
-- `INBOX_FILE` — path to inbox JSON (default: `./unified_inbox.json`)
-- `OUTPUT_DIR` — directory for Markdown output (default: disabled)
+Claude Code config (`~/.claude/claude_desktop_config.json`):
+```json
+{
+    "mcpServers": {
+        "x-reader": {
+            "command": "python",
+            "args": ["/path/to/x-reader/mcp_server.py"]
+        }
+    }
+}
+```
+
+## Supported Platforms
+
+| Platform | Text Fetch | Video/Audio Transcript |
+|----------|-----------|----------------------|
+| YouTube | ✅ Jina | ✅ yt-dlp subtitles → Whisper fallback |
+| Bilibili (B站) | ✅ API | ✅ API audio stream → Whisper |
+| X / Twitter | ✅ Jina | ✅ yt-dlp → Whisper |
+| WeChat (微信公众号) | ✅ Jina | — |
+| Xiaohongshu (小红书) | ✅ Jina | — |
+| Telegram | ✅ Telethon | — |
+| RSS | ✅ feedparser | — |
+| 小宇宙 (Xiaoyuzhou) | — | ✅ curl CDN extract → Whisper |
+| Apple Podcasts | — | ✅ yt-dlp → Whisper |
+| Any web page | ✅ Jina fallback | — |
+
+## Install
+
+```bash
+# From GitHub (recommended)
+pip install git+https://github.com/runesleo/x-reader.git
+
+# With Telegram support
+pip install "x-reader[telegram] @ git+https://github.com/runesleo/x-reader.git"
+
+# With all optional dependencies
+pip install "x-reader[all] @ git+https://github.com/runesleo/x-reader.git"
+```
+
+Or clone and install locally:
+```bash
+git clone https://github.com/runesleo/x-reader.git
+cd x-reader
+pip install -e ".[all]"
+```
+
+### Dependencies for video/audio (optional)
+
+```bash
+# macOS
+brew install yt-dlp ffmpeg
+
+# Linux
+pip install yt-dlp
+apt install ffmpeg
+```
+
+For Whisper transcription, get a free API key from [Groq](https://console.groq.com/keys) and set:
+```bash
+export GROQ_API_KEY=your_key_here
+```
 
 ## Use as Library
 
@@ -90,24 +155,65 @@ async def main():
 asyncio.run(main())
 ```
 
+## Configuration
+
+Copy `.env.example` to `.env`:
+
+```bash
+cp .env.example .env
+```
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `TG_API_ID` | Telegram only | From https://my.telegram.org |
+| `TG_API_HASH` | Telegram only | From https://my.telegram.org |
+| `GROQ_API_KEY` | Video/audio only | From https://console.groq.com/keys |
+| `INBOX_FILE` | No | Path to inbox JSON (default: `./unified_inbox.json`) |
+| `OUTPUT_DIR` | No | Directory for Markdown output (default: disabled) |
+
 ## Architecture
 
 ```
-x_reader/
-├── cli.py          # CLI entry point
-├── reader.py       # URL dispatcher (UniversalReader)
-├── schema.py       # Unified data model (UnifiedContent + Inbox)
-├── fetchers/
-│   ├── jina.py     # Jina Reader (universal fallback)
-│   ├── bilibili.py # Bilibili API
-│   ├── rss.py      # feedparser
-│   ├── telegram.py # Telethon
-│   ├── twitter.py  # Jina-based
-│   ├── wechat.py   # Jina-based
-│   ├── xhs.py      # Jina-based
-│   └── youtube.py  # Jina-based
-└── utils/
-    └── storage.py  # JSON + Markdown dual output
+x-reader/
+├── x_reader/              # Python package
+│   ├── cli.py             # CLI entry point
+│   ├── reader.py          # URL dispatcher (UniversalReader)
+│   ├── schema.py          # Unified data model (UnifiedContent + Inbox)
+│   ├── fetchers/
+│   │   ├── jina.py        # Jina Reader (universal fallback)
+│   │   ├── bilibili.py    # Bilibili API
+│   │   ├── youtube.py     # yt-dlp subtitle extraction
+│   │   ├── rss.py         # feedparser
+│   │   ├── telegram.py    # Telethon
+│   │   ├── twitter.py     # Jina-based
+│   │   ├── wechat.py      # Jina-based
+│   │   └── xhs.py         # Jina-based
+│   └── utils/
+│       └── storage.py     # JSON + Markdown dual output
+├── skills/                # Claude Code skills
+│   ├── video/             # Video/podcast → transcript + summary
+│   └── analyzer/          # Content → structured analysis
+├── mcp_server.py          # MCP server entry point
+└── pyproject.toml
+```
+
+## How the Layers Work Together
+
+```
+User sends URL
+    │
+    ├─ Text content (article, tweet, WeChat)
+    │   └─ Python fetcher → UnifiedContent → inbox
+    │
+    ├─ Video (YouTube, Bilibili, X video)
+    │   ├─ Python fetcher → metadata (title, description)
+    │   └─ Video skill → full transcript via subtitles/Whisper
+    │
+    ├─ Podcast (小宇宙, Apple Podcasts)
+    │   └─ Video skill → full transcript via Whisper
+    │
+    └─ Analysis requested
+        └─ Analyzer skill → structured report + action items
 ```
 
 ## License

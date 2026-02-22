@@ -41,6 +41,10 @@ class UniversalReader:
             return "xhs"
         if "bilibili.com" in domain or "b23.tv" in domain:
             return "bilibili"
+        if "xiaoyuzhoufm.com" in domain:
+            return "podcast"
+        if "podcasts.apple.com" in domain:
+            return "podcast"
         if "t.me" in domain or "telegram.org" in domain:
             return "telegram"
         if url.endswith(".xml") or "/rss" in url or "/feed" in url or "/atom" in url:
@@ -53,6 +57,10 @@ class UniversalReader:
 
         The main entry point — give it a URL, get back structured content.
         """
+        # Ensure URL has scheme
+        if not url.startswith(("http://", "https://")):
+            url = f"https://{url}"
+
         platform = self._detect_platform(url)
         logger.info(f"[{platform}] {url[:60]}...")
 
@@ -112,9 +120,12 @@ class UniversalReader:
 
         if platform == "telegram":
             from x_reader.fetchers.telegram import fetch_telegram
-            messages = await fetch_telegram(url, limit=1)
+            # Extract channel username from t.me URL
+            path = urlparse(url).path.strip("/").split("/")[0]
+            channel = path if path else url
+            messages = await fetch_telegram(channel, limit=1)
             if messages:
-                return from_telegram(messages[0], url, url)
+                return from_telegram(messages[0], channel, channel)
             raise ValueError(f"No messages from Telegram channel: {url}")
 
         # Fallback: Jina Reader for any unknown URL
