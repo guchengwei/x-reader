@@ -18,7 +18,7 @@ Any URL → Platform Detection → Fetch Content → Unified Output
                                API: Bilibili / RSS / Telegram
 ```
 
-For video and podcast content, the Python layer handles metadata + subtitles. The **Claude Code skills** (optional) take it further — full Whisper transcription + AI-powered summary reports.
+The Python layer handles text fetching and YouTube subtitle extraction. The **Claude Code skills** (optional) add full Whisper transcription for video/podcast and AI-powered content analysis.
 
 ## Three Layers
 
@@ -48,6 +48,8 @@ x-reader list
 
 ### Layer 2: Claude Code Skills
 
+> Requires cloning the repo (not included in pip install).
+
 For video/podcast transcription and content analysis:
 
 ```
@@ -66,8 +68,12 @@ Then in Claude Code, just send a YouTube/Bilibili/podcast link — the video ski
 
 ### Layer 3: MCP Server
 
+> Requires cloning the repo (mcp_server.py is not included in pip install).
+
 ```bash
-pip install "x-reader[mcp] @ git+https://github.com/runesleo/x-reader.git"
+git clone https://github.com/runesleo/x-reader.git
+cd x-reader
+pip install -e ".[mcp]"
 python mcp_server.py
 ```
 

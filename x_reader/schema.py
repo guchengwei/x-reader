@@ -122,7 +122,7 @@ def from_telegram(msg: dict, channel_name: str, channel_username: str) -> Unifie
         source_name=channel_name,
         title=msg.get('text', '')[:100],
         content=msg.get('text', ''),
-        url=f"https://t.me/{channel_username}",
+        url=msg.get('url', f"https://t.me/{channel_username}"),
         extra={"views": msg.get('views', 0), "channel_username": channel_username},
     )
 

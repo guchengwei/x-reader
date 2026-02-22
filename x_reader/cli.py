@@ -114,8 +114,8 @@ Examples:
         cmd_list()
     elif cmd == "clear":
         cmd_clear()
-    elif cmd.startswith("http") or cmd.startswith("www."):
-        urls = [arg for arg in sys.argv[1:] if arg.startswith(("http", "www."))]
+    elif cmd.startswith("http") or cmd.startswith("www.") or "." in cmd:
+        urls = [arg for arg in sys.argv[1:] if arg.startswith(("http", "www.")) or "." in arg]
         cmd_fetch(urls)
     else:
         print(f"❌ Unknown command: {cmd}")
