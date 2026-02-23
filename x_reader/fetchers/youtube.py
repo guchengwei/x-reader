@@ -20,6 +20,21 @@ from typing import Dict, Any
 from x_reader.fetchers.jina import fetch_via_jina
 
 
+def _transcribe_local(audio_path: str) -> str:
+    """Transcribe audio using mlx-whisper on Apple Silicon. Returns transcript or empty string."""
+    try:
+        import mlx_whisper
+        model = os.getenv("MLX_WHISPER_MODEL", "mlx-community/whisper-large-v3-mlx")
+        logger.info(f"[youtube] transcribing locally with {model}")
+        result = mlx_whisper.transcribe(audio_path, path_or_hf_repo=model)
+        text = result.get("text", "").strip()
+        logger.info(f"[youtube] local transcription done, {len(text)} chars")
+        return text
+    except Exception as e:
+        logger.warning(f"[youtube] local transcription failed: {e}")
+        return ""
+
+
 def _extract_video_id(url: str) -> str:
     """Extract video ID from YouTube URL."""
     match = re.search(r'(?:v=|youtu\.be/)([a-zA-Z0-9_-]{11})', url)
@@ -133,6 +148,13 @@ def _transcribe_via_whisper(url: str) -> str:
         if file_size > 25 * 1024 * 1024:
             logger.warning(f"Audio file too large ({file_size // 1024 // 1024}MB > 25MB limit)")
             return ""
+
+        use_local = os.getenv("USE_LOCAL_WHISPER", "false").lower() == "true"
+        if use_local:
+            transcript = _transcribe_local(audio_path)
+            if transcript:
+                return transcript
+            logger.info("[youtube] local transcription empty, falling back to Groq")
 
         logger.info(f"Transcribing {file_size // 1024}KB audio via Groq Whisper...")
 
