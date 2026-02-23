@@ -27,6 +27,9 @@ def _transcribe_local(audio_path: str) -> str:
         model = os.getenv("MLX_WHISPER_MODEL", "mlx-community/whisper-large-v3-mlx")
         logger.info(f"[youtube] transcribing locally with {model}")
         result = mlx_whisper.transcribe(audio_path, path_or_hf_repo=model)
+        if not isinstance(result, dict):
+            logger.warning(f"[youtube] mlx_whisper returned unexpected type: {type(result)}")
+            return ""
         text = result.get("text", "").strip()
         logger.info(f"[youtube] local transcription done, {len(text)} chars")
         return text
@@ -120,7 +123,10 @@ def _transcribe_via_whisper(url: str) -> str:
         ]
 
         try:
-            subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+            if proc.returncode != 0:
+                logger.warning(f"[youtube] yt-dlp audio download failed (exit {proc.returncode}): {proc.stderr[:200]}")
+                return ""
         except FileNotFoundError:
             logger.warning("yt-dlp not found for audio download")
             return ""
@@ -153,7 +159,7 @@ def _transcribe_via_whisper(url: str) -> str:
 
         api_key = os.getenv("GROQ_API_KEY")
         if not api_key:
-            logger.info("GROQ_API_KEY not set, skipping Groq Whisper transcription")
+            logger.warning("GROQ_API_KEY not set and local transcription returned empty — no transcript available")
             return ""
 
         logger.info(f"Transcribing {file_size // 1024}KB audio via Groq Whisper...")
