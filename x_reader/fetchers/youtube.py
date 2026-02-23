@@ -106,11 +106,6 @@ def _transcribe_via_whisper(url: str) -> str:
     Groq Whisper limit: 25MB audio file.
     Returns transcript text, or empty string if unavailable.
     """
-    api_key = os.getenv("GROQ_API_KEY")
-    if not api_key:
-        logger.info("GROQ_API_KEY not set, skipping Whisper transcription")
-        return ""
-
     with tempfile.TemporaryDirectory() as tmpdir:
         output_template = os.path.join(tmpdir, "audio.%(ext)s")
 
@@ -155,6 +150,11 @@ def _transcribe_via_whisper(url: str) -> str:
             if transcript:
                 return transcript
             logger.info("[youtube] local transcription empty, falling back to Groq")
+
+        api_key = os.getenv("GROQ_API_KEY")
+        if not api_key:
+            logger.info("GROQ_API_KEY not set, skipping Groq Whisper transcription")
+            return ""
 
         logger.info(f"Transcribing {file_size // 1024}KB audio via Groq Whisper...")
 
