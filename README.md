@@ -102,18 +102,20 @@ Claude Code config (`~/.claude/claude_desktop_config.json`):
 
 | Platform | Text Fetch | Video/Audio Transcript |
 |----------|-----------|----------------------|
-| YouTube | ✅ Jina | ✅ yt-dlp subtitles → Whisper fallback |
-| Bilibili (B站) | ✅ API | ✅ API audio stream → Whisper |
-| X / Twitter | ✅ Jina | ✅ yt-dlp → Whisper |
+| YouTube | ✅ Jina | ✅ yt-dlp subtitles → Groq Whisper fallback |
+| Bilibili (B站) | ✅ API | ✅ via Claude Code skill |
+| X / Twitter | ✅ Jina → Playwright | — |
 | WeChat (微信公众号) | ✅ Jina → Playwright | — |
 | Xiaohongshu (小红书) | ✅ Jina → Playwright* | — |
 | Telegram | ✅ Telethon | — |
 | RSS | ✅ feedparser | — |
-| 小宇宙 (Xiaoyuzhou) | — | ✅ curl CDN extract → Whisper |
-| Apple Podcasts | — | ✅ yt-dlp → Whisper |
+| 小宇宙 (Xiaoyuzhou) | — | ✅ via Claude Code skill |
+| Apple Podcasts | — | ✅ via Claude Code skill |
 | Any web page | ✅ Jina fallback | — |
 
 > \*XHS requires a one-time login: `x-reader login xhs` (saves session for Playwright fallback)
+>
+> YouTube Whisper transcription requires `GROQ_API_KEY` — get a free key from [Groq](https://console.groq.com/keys)
 
 ## Install
 
@@ -184,9 +186,10 @@ cp .env.example .env
 |----------|----------|-------------|
 | `TG_API_ID` | Telegram only | From https://my.telegram.org |
 | `TG_API_HASH` | Telegram only | From https://my.telegram.org |
-| `GROQ_API_KEY` | Video/audio only | From https://console.groq.com/keys |
+| `GROQ_API_KEY` | Whisper only | From https://console.groq.com/keys (free) |
 | `INBOX_FILE` | No | Path to inbox JSON (default: `./unified_inbox.json`) |
 | `OUTPUT_DIR` | No | Directory for Markdown output (default: disabled) |
+| `OBSIDIAN_VAULT` | No | Path to Obsidian vault (writes to `01-收集箱/x-reader-inbox.md`) |
 
 ## Architecture
 

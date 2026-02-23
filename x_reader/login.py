@@ -18,6 +18,8 @@ PLATFORM_URLS = {
     "xhs": "https://www.xiaohongshu.com/explore",
     "xiaohongshu": "https://www.xiaohongshu.com/explore",
     "wechat": "https://mp.weixin.qq.com",
+    "twitter": "https://x.com/login",
+    "x": "https://x.com/login",
 }
 
 
@@ -50,7 +52,12 @@ def login(platform: str) -> None:
     SESSION_DIR.mkdir(parents=True, exist_ok=True)
     session_path = SESSION_DIR / f"{platform}.json"
     # Normalize alias to canonical name
-    canonical = "xhs" if platform in ("xhs", "xiaohongshu") else platform
+    if platform in ("xhs", "xiaohongshu"):
+        canonical = "xhs"
+    elif platform in ("twitter", "x"):
+        canonical = "twitter"
+    else:
+        canonical = platform
     session_path = SESSION_DIR / f"{canonical}.json"
 
     print(f"🌐 Opening {platform} login page: {login_url}")

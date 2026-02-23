@@ -43,14 +43,23 @@ def save_to_markdown(item: UnifiedContent, filepath: str = None):
     """
     Append content to a Markdown file (e.g. Obsidian vault).
 
-    If filepath is not provided, skips markdown output.
-    Set OUTPUT_DIR env var to enable.
+    Supports two output modes:
+    - OUTPUT_DIR: Write to {OUTPUT_DIR}/content_hub.md
+    - OBSIDIAN_VAULT: Write to {OBSIDIAN_VAULT}/01-收集箱/x-reader-inbox.md
+
+    If neither is set, skips markdown output.
     """
     if not filepath:
-        output_dir = os.getenv("OUTPUT_DIR", "")
-        if not output_dir:
-            return
-        filepath = os.path.join(output_dir, "content_hub.md")
+        # Priority 1: Obsidian vault
+        vault_path = os.getenv("OBSIDIAN_VAULT", "")
+        if vault_path:
+            filepath = os.path.join(vault_path, "01-收集箱", "x-reader-inbox.md")
+        else:
+            # Priority 2: generic output dir
+            output_dir = os.getenv("OUTPUT_DIR", "")
+            if not output_dir:
+                return
+            filepath = os.path.join(output_dir, "content_hub.md")
 
     path = Path(filepath)
     path.parent.mkdir(parents=True, exist_ok=True)
