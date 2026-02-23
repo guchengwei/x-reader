@@ -42,6 +42,9 @@ x-reader https://x.com/elonmusk/status/123456
 # Fetch multiple URLs
 x-reader https://url1.com https://url2.com
 
+# Login to a platform (one-time, for browser fallback)
+x-reader login xhs
+
 # View inbox
 x-reader list
 ```
@@ -102,13 +105,15 @@ Claude Code config (`~/.claude/claude_desktop_config.json`):
 | YouTube | ✅ Jina | ✅ yt-dlp subtitles → Whisper fallback |
 | Bilibili (B站) | ✅ API | ✅ API audio stream → Whisper |
 | X / Twitter | ✅ Jina | ✅ yt-dlp → Whisper |
-| WeChat (微信公众号) | ✅ Jina | — |
-| Xiaohongshu (小红书) | ✅ Jina | — |
+| WeChat (微信公众号) | ✅ Jina → Playwright | — |
+| Xiaohongshu (小红书) | ✅ Jina → Playwright* | — |
 | Telegram | ✅ Telethon | — |
 | RSS | ✅ feedparser | — |
 | 小宇宙 (Xiaoyuzhou) | — | ✅ curl CDN extract → Whisper |
 | Apple Podcasts | — | ✅ yt-dlp → Whisper |
 | Any web page | ✅ Jina fallback | — |
+
+> \*XHS requires a one-time login: `x-reader login xhs` (saves session for Playwright fallback)
 
 ## Install
 
@@ -119,8 +124,13 @@ pip install git+https://github.com/runesleo/x-reader.git
 # With Telegram support
 pip install "x-reader[telegram] @ git+https://github.com/runesleo/x-reader.git"
 
+# With browser fallback (Playwright — for XHS/WeChat anti-scraping)
+pip install "x-reader[browser] @ git+https://github.com/runesleo/x-reader.git"
+playwright install chromium
+
 # With all optional dependencies
 pip install "x-reader[all] @ git+https://github.com/runesleo/x-reader.git"
+playwright install chromium
 ```
 
 Or clone and install locally:
@@ -128,6 +138,7 @@ Or clone and install locally:
 git clone https://github.com/runesleo/x-reader.git
 cd x-reader
 pip install -e ".[all]"
+playwright install chromium
 ```
 
 ### Dependencies for video/audio (optional)
@@ -185,15 +196,17 @@ x-reader/
 │   ├── cli.py             # CLI entry point
 │   ├── reader.py          # URL dispatcher (UniversalReader)
 │   ├── schema.py          # Unified data model (UnifiedContent + Inbox)
+│   ├── login.py           # Browser login manager (saves sessions)
 │   ├── fetchers/
 │   │   ├── jina.py        # Jina Reader (universal fallback)
+│   │   ├── browser.py     # Playwright headless (anti-scraping fallback)
 │   │   ├── bilibili.py    # Bilibili API
 │   │   ├── youtube.py     # yt-dlp subtitle extraction
 │   │   ├── rss.py         # feedparser
 │   │   ├── telegram.py    # Telethon
 │   │   ├── twitter.py     # Jina-based
-│   │   ├── wechat.py      # Jina-based
-│   │   └── xhs.py         # Jina-based
+│   │   ├── wechat.py      # Jina → Playwright fallback
+│   │   └── xhs.py         # Jina → Playwright + session fallback
 │   └── utils/
 │       └── storage.py     # JSON + Markdown dual output
 ├── skills/                # Claude Code skills

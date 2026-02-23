@@ -85,6 +85,12 @@ def cmd_clear():
         print("📦 Inbox is already empty")
 
 
+def cmd_login(platform: str):
+    """Open browser for manual login to a platform."""
+    from x_reader.login import login
+    login(platform)
+
+
 def main():
     if len(sys.argv) < 2:
         print("""
@@ -93,6 +99,7 @@ def main():
 Usage:
     x-reader <url>              Fetch content from any URL
     x-reader <url1> <url2>      Fetch multiple URLs
+    x-reader login <platform>   Login to a platform (saves session for browser fallback)
     x-reader list               Show inbox contents
     x-reader clear              Clear inbox
 
@@ -103,14 +110,20 @@ Supported platforms:
 Examples:
     x-reader https://mp.weixin.qq.com/s/abc123
     x-reader https://x.com/elonmusk/status/123456
-    x-reader https://www.bilibili.com/video/BV1xx411c7XW
     x-reader https://www.xiaohongshu.com/explore/abc123
+    x-reader login xhs
 """)
         return
 
     cmd = sys.argv[1].lower()
 
-    if cmd == "list":
+    if cmd == "login":
+        if len(sys.argv) < 3:
+            print("❌ Usage: x-reader login <platform>")
+            print("   Supported: xhs, wechat")
+            sys.exit(1)
+        cmd_login(sys.argv[2])
+    elif cmd == "list":
         cmd_list()
     elif cmd == "clear":
         cmd_clear()
