@@ -8,8 +8,26 @@ Transcription strategy:
 """
 
 import os
+import subprocess
+import time
 import requests
 from loguru import logger
+
+
+def _get_audio_duration(audio_path: str) -> float | None:
+    """Return audio duration in seconds via ffprobe, or None if unavailable."""
+    try:
+        result = subprocess.run(
+            [
+                "ffprobe", "-v", "quiet", "-show_entries",
+                "format=duration", "-of", "default=noprint_wrappers=1:nokey=1",
+                audio_path,
+            ],
+            capture_output=True, text=True, timeout=10,
+        )
+        return float(result.stdout.strip())
+    except Exception:
+        return None
 
 
 def transcribe_local(audio_path: str) -> str:
@@ -17,13 +35,40 @@ def transcribe_local(audio_path: str) -> str:
     try:
         import mlx_whisper
         model = os.getenv("MLX_WHISPER_MODEL", "mlx-community/whisper-large-v3-mlx")
-        logger.info(f"[whisper] transcribing locally with {model}")
-        result = mlx_whisper.transcribe(audio_path, path_or_hf_repo=model)
+        language = os.getenv("WHISPER_LANGUAGE") or None
+
+        audio_duration = _get_audio_duration(audio_path)
+        if audio_duration:
+            logger.info(f"[whisper] audio duration: {audio_duration:.1f}s ({audio_duration / 60:.1f}min)")
+
+        lang_hint = f", language={language}" if language else " (auto-detect language)"
+        logger.info(f"[whisper] transcribing locally with {model}{lang_hint}")
+
+        t0 = time.monotonic()
+        kwargs: dict = dict(
+            path_or_hf_repo=model,
+            word_timestamps=False,
+            condition_on_previous_text=False,
+        )
+        if language:
+            kwargs["language"] = language
+
+        result = mlx_whisper.transcribe(audio_path, **kwargs)
+        elapsed = time.monotonic() - t0
+
         if not isinstance(result, dict):
             logger.warning(f"[whisper] mlx_whisper returned unexpected type: {type(result)}")
             return ""
+
         text = result.get("text", "").strip()
-        logger.info(f"[whisper] local transcription done, {len(text)} chars")
+        if audio_duration and audio_duration > 0:
+            rt_factor = audio_duration / elapsed
+            logger.info(
+                f"[whisper] transcription done in {elapsed:.1f}s "
+                f"({rt_factor:.1f}x real-time), {len(text)} chars"
+            )
+        else:
+            logger.info(f"[whisper] transcription done in {elapsed:.1f}s, {len(text)} chars")
         return text
     except Exception as e:
         logger.warning(f"[whisper] local transcription failed: {e}")
