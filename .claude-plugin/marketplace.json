@@ -13,7 +13,7 @@
       "author": {
         "name": "guchengwei"
       },
-      "source": ".",
+      "source": "./plugins/x-reader",
       "category": "productivity"
     }
   ]
