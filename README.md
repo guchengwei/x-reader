@@ -122,8 +122,9 @@ python3 scripts/sogou_wechat.py --keyword "AI Agent" --limit 5 --json
 ## 📦 New package runtime (milestone 1)
 
 A new package entrypoint now exists for the first migration milestone.
-Current package scope is only:
+Current package scope is:
 - single X URL -> normalized local content bundle
+- local bundle sync into a target repo working tree
 
 Legacy scripts remain the broader feature surface during migration.
 
@@ -131,6 +132,7 @@ Legacy scripts remain the broader feature surface during migration.
 pip install -e .[dev]
 python -m xfetch --help
 python -m xfetch ingest "https://x.com/jack/status/20"
+python -m xfetch sync ./content-out/2006-03/x-20-jack --target-repo ../target-repo
 ```
 
 ## 🖥️ Works with Claude Code / CC
