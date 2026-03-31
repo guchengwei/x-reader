@@ -119,6 +119,20 @@ python3 scripts/fetch_china.py --url "https://mp.weixin.qq.com/s/..."
 python3 scripts/sogou_wechat.py --keyword "AI Agent" --limit 5 --json
 ```
 
+## 📦 New package runtime (milestone 1)
+
+A new package entrypoint now exists for the first migration milestone.
+Current package scope is only:
+- single X URL -> normalized local content bundle
+
+Legacy scripts remain the broader feature surface during migration.
+
+```bash
+pip install -e .[dev]
+python -m xfetch --help
+python -m xfetch ingest "https://x.com/jack/status/20"
+```
+
 ## 🖥️ Works with Claude Code / CC
 
 Since x-tweet-fetcher has **zero mandatory dependencies**, it works perfectly in constrained environments:
