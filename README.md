@@ -119,12 +119,13 @@ python3 scripts/fetch_china.py --url "https://mp.weixin.qq.com/s/..."
 python3 scripts/sogou_wechat.py --keyword "AI Agent" --limit 5 --json
 ```
 
-## 📦 New package runtime (milestone 1)
+## 📦 New package runtime
 
-A new package entrypoint now exists for the first migration milestone.
+A new package entrypoint now exists for the migration path.
 Current package scope is:
 - single X URL -> normalized local content bundle
 - local bundle sync into a target repo working tree
+- git-backed publish into a target repo with GitHub Pages URL metadata
 
 Legacy scripts remain the broader feature surface during migration.
 
@@ -132,8 +133,14 @@ Legacy scripts remain the broader feature surface during migration.
 pip install -e .[dev]
 python -m xfetch --help
 python -m xfetch ingest "https://x.com/jack/status/20"
-python -m xfetch sync ./content-out/2006-03/x-20-jack --target-repo ../target-repo
+python -m xfetch sync ./content-out/2006-03/x-20-jack --target-repo ../target-repo --repo-owner guchengwei --repo-name x-reader
+python -m xfetch publish ./content-out/2006-03/x-20-jack --target-repo ../target-repo --repo-owner guchengwei --repo-name x-reader
 ```
+
+Publish notes:
+- `publish` assumes the target repo already has git remote/auth configured
+- GitHub Pages deployment happens in GitHub Actions on pushes to `main`
+- the Pages workflow deploys the already-rendered `site/` directory; scraping and rendering stay local
 
 ## 🖥️ Works with Claude Code / CC
 
