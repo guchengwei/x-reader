@@ -193,7 +193,6 @@ def _merge_bot_commands(existing_commands):
 
     preferred_commands = [
         BotCommand(PRIMARY_TELEGRAM_COMMAND, "Fetch and archive a supported link"),
-        BotCommand("start", "Show usage"),
     ]
     merged: list[BotCommand] = []
     seen: set[str] = set()

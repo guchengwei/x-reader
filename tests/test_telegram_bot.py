@@ -32,7 +32,7 @@ def test_parse_save_command_returns_none_without_url():
 
 
 
-def test_merge_bot_commands_preserves_existing_entries():
+def test_merge_bot_commands_preserves_existing_entries_without_registering_start():
     from telegram import BotCommand
 
     merged = _merge_bot_commands(
@@ -42,9 +42,9 @@ def test_merge_bot_commands_preserves_existing_entries():
         ]
     )
 
-    assert [command.command for command in merged] == [PRIMARY_TELEGRAM_COMMAND, "start", "new"]
-    assert merged[1].description == "Show usage"
-    assert merged[2].description == "Create something new"
+    assert [command.command for command in merged] == [PRIMARY_TELEGRAM_COMMAND, "new", "start"]
+    assert merged[1].description == "Create something new"
+    assert merged[2].description == "Old description"
 
 
 

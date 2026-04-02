@@ -161,7 +161,7 @@ In Telegram, send either:
 - `/link https://x.com/.../status/...`
 - or just paste a supported URL
 
-The bot now registers `/link` as its visible Telegram command menu entry on startup. `/save` is still accepted as a legacy alias, and existing Telegram command menu entries are preserved instead of being overwritten.
+The bot now registers `/link` as its visible Telegram command menu entry on startup. `/save` is still accepted as a legacy alias, and it does not add `/start` to the visible Telegram command menu.
 
 If target repo options are configured, the bot ingests and publishes immediately.
 Otherwise it only saves a local portable bundle.
