@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import json
 from pathlib import Path
-from typing import Awaitable, Callable
+from typing import Final
 
 from xfetch.config import PublishTargetConfig, load_config
 from xfetch.connectors.x import XConnector
@@ -34,11 +34,19 @@ class TelegramBotRuntimeConfig:
     site_subdir: str = "site"
 
 
+PRIMARY_TELEGRAM_COMMAND: Final[str] = "link"
+LEGACY_TELEGRAM_COMMANDS: Final[tuple[str, ...]] = ("save",)
+TELEGRAM_COMMANDS: Final[tuple[str, ...]] = (PRIMARY_TELEGRAM_COMMAND, *LEGACY_TELEGRAM_COMMANDS)
+
+
 def parse_save_command(text: str | None) -> str | None:
     if not text:
         return None
     parts = text.strip().split(maxsplit=1)
-    if len(parts) != 2 or parts[0].split("@")[0] != "/save":
+    if len(parts) != 2:
+        return None
+    command = parts[0].split("@")[0].lstrip("/")
+    if command not in TELEGRAM_COMMANDS:
         return None
     url = parts[1].strip()
     return url or None
@@ -126,14 +134,14 @@ def build_save_reply(result: SaveResult) -> str:
 
 
 async def _start(update, context) -> None:
-    await update.message.reply_text("Send /save <x-url> to fetch and archive a post.")
+    await update.message.reply_text(f"Send /{PRIMARY_TELEGRAM_COMMAND} <x-url> to fetch and archive a post.")
 
 
 async def _save(update, context) -> None:
     message_text = update.message.text if update.message else ""
     url = parse_save_command(message_text)
     if not url:
-        await update.message.reply_text("Usage: /save <x-url>")
+        await update.message.reply_text(f"Usage: /{PRIMARY_TELEGRAM_COMMAND} <x-url>")
         return
 
     runtime: TelegramBotRuntimeConfig = context.application.bot_data["xfetch_runtime"]
@@ -176,8 +184,30 @@ async def _fallback_text(update, context) -> None:
         await update.message.reply_text(build_save_reply(result))
         return
 
-    await update.message.reply_text("Send /save <x-url> or just paste a supported URL.")
+    await update.message.reply_text(f"Send /{PRIMARY_TELEGRAM_COMMAND} <x-url> or just paste a supported URL.")
 
+
+
+def _merge_bot_commands(existing_commands):
+    from telegram import BotCommand
+
+    preferred_commands = [
+        BotCommand(PRIMARY_TELEGRAM_COMMAND, "Fetch and archive a supported link"),
+        BotCommand("start", "Show usage"),
+    ]
+    merged: list[BotCommand] = []
+    seen: set[str] = set()
+    for command in [*preferred_commands, *existing_commands]:
+        if command.command in seen:
+            continue
+        merged.append(command)
+        seen.add(command.command)
+    return merged
+
+
+async def _post_init(application) -> None:
+    existing_commands = await application.bot.get_my_commands()
+    await application.bot.set_my_commands(_merge_bot_commands(existing_commands))
 
 
 def run_telegram_bot(runtime: TelegramBotRuntimeConfig) -> int:
@@ -186,10 +216,12 @@ def run_telegram_bot(runtime: TelegramBotRuntimeConfig) -> int:
     except ImportError as exc:
         raise ImportError("Install Telegram bot support with: pip install -e .[telegram-bot]") from exc
 
-    application = Application.builder().token(runtime.token).build()
+    application = Application.builder().token(runtime.token).post_init(_post_init).build()
     application.bot_data["xfetch_runtime"] = runtime
     application.add_handler(CommandHandler("start", _start))
-    application.add_handler(CommandHandler("save", _save))
+    application.add_handler(CommandHandler(PRIMARY_TELEGRAM_COMMAND, _save))
+    for legacy_command in LEGACY_TELEGRAM_COMMANDS:
+        application.add_handler(CommandHandler(legacy_command, _save))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, _fallback_text))
     application.run_polling()
     return 0

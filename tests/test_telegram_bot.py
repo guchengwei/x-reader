@@ -4,17 +4,47 @@ import pytest
 
 from xfetch.cli import build_parser
 from xfetch.models import NormalizedDocument
-from xfetch.telegram_bot import SaveResult, build_save_reply, parse_save_command, save_url
+from xfetch.telegram_bot import (
+    LEGACY_TELEGRAM_COMMANDS,
+    PRIMARY_TELEGRAM_COMMAND,
+    SaveResult,
+    _merge_bot_commands,
+    build_save_reply,
+    parse_save_command,
+    save_url,
+)
 
 
 
-def test_parse_save_command_extracts_url():
-    assert parse_save_command("/save https://x.com/alice/status/123") == "https://x.com/alice/status/123"
+def test_parse_save_command_extracts_url_from_primary_command():
+    assert parse_save_command(f"/{PRIMARY_TELEGRAM_COMMAND} https://x.com/alice/status/123") == "https://x.com/alice/status/123"
+
+
+
+def test_parse_save_command_accepts_legacy_commands():
+    for command in LEGACY_TELEGRAM_COMMANDS:
+        assert parse_save_command(f"/{command} https://x.com/alice/status/123") == "https://x.com/alice/status/123"
 
 
 
 def test_parse_save_command_returns_none_without_url():
-    assert parse_save_command("/save") is None
+    assert parse_save_command(f"/{PRIMARY_TELEGRAM_COMMAND}") is None
+
+
+
+def test_merge_bot_commands_preserves_existing_entries():
+    from telegram import BotCommand
+
+    merged = _merge_bot_commands(
+        [
+            BotCommand("new", "Create something new"),
+            BotCommand("start", "Old description"),
+        ]
+    )
+
+    assert [command.command for command in merged] == [PRIMARY_TELEGRAM_COMMAND, "start", "new"]
+    assert merged[1].description == "Show usage"
+    assert merged[2].description == "Create something new"
 
 
 
