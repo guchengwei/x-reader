@@ -134,6 +134,8 @@ Current package scope is:
 - RSS/Atom feed URL -> normalized local content bundle
 - WeChat article URL -> normalized local content bundle
 - Xiaohongshu note URL -> normalized local content bundle
+- YouTube video URL -> normalized local content bundle
+- Bilibili video URL -> normalized local content bundle
 - local bundle sync into a target repo working tree
 - git-backed publish into a target repo with GitHub Pages URL metadata
 
@@ -147,6 +149,8 @@ python -m xfetch ingest "https://example.com/posts/123"
 python -m xfetch ingest "https://example.com/feed.xml"
 python -m xfetch ingest "https://mp.weixin.qq.com/s/example"
 python -m xfetch ingest "https://www.xiaohongshu.com/explore/67b8e3f5000000000b00d8e2"
+python -m xfetch ingest "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+python -m xfetch ingest "https://www.bilibili.com/video/BV1xx411c7mD"
 python -m xfetch sync ./content-out/2006-03/x-20-jack --target-repo /Users/zion/link-vault-publish --repo-owner guchengwei --repo-name link-vault
 python -m xfetch publish ./content-out/2006-03/x-20-jack --target-repo /Users/zion/link-vault-publish --repo-owner guchengwei --repo-name link-vault
 ```
