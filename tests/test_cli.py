@@ -141,7 +141,7 @@ def test_cli_ingest_writes_bundle(tmp_path, monkeypatch):
 
 
 def test_cli_returns_2_for_unsupported_url(tmp_path):
-    rc = main(["ingest", "https://example.com/post/123", "--content-root", str(tmp_path)])
+    rc = main(["ingest", "mailto:alice@example.com", "--content-root", str(tmp_path)])
     assert rc == 2
 
 

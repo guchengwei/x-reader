@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 
 from .config import PublishTargetConfig, load_config
-from .connectors.x import XConnector
+from .connectors.registry import pick_connector as pick_registered_connector
 from .pipeline.bundle import write_bundle
 from .publishing.git_publish import publish_repo
 from .publishing.github_repo_sync import sync_bundle_to_repo
@@ -46,10 +46,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def pick_connector(url: str):
-    connector = XConnector()
-    if connector.can_handle(url):
-        return connector
-    return None
+    return pick_registered_connector(url)
 
 
 def _build_publish_target(args) -> PublishTargetConfig:
