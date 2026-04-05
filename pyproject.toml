@@ -3,9 +3,9 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "x-tweet-fetcher"
+name = "xfetch"
 version = "0.1.0"
-description = "Portable content-ingestion runtime for X and related sources"
+description = "Chat-first link preservation runtime for durable portable bundles"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = []

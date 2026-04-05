@@ -1,16 +1,14 @@
 ---
-name: x-tweet-fetcher
+name: xfetch
 description: >
-  Fetch tweets, replies, and user timelines from X/Twitter without login or API keys.
-  Also supports Chinese platforms (Weibo, Bilibili, CSDN, WeChat).
-  Includes camofox_search() for zero-cost Google search without API keys.
-  Basic tweet fetching: zero dependencies. Replies/timelines/search: requires Camofox.
-  NEW: X-Tracker for tweet growth monitoring with burst detection.
+  Chat-first link preservation runtime for ingesting supported URLs into portable
+  bundles and publishing them through a separate content repo.
 ---
 
-# X Tweet Fetcher
+# xfetch
 
-Fetch tweets from X/Twitter without authentication. Supports tweet content, reply threads, user timelines, Chinese platforms, and tweet growth tracking.
+xfetch ingests supported URLs into normalized portable bundles, then syncs/publishes
+those bundles into a clean content repo for durable hosting.
 
 ## Feature Overview
 

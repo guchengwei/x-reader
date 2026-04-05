@@ -3,4 +3,5 @@ data/
 logs/
 content-out/
 site-out/
+xfetch.egg-info/
 x_tweet_fetcher.egg-info/
