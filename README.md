@@ -130,6 +130,8 @@ Operational path:
 
 Current package scope is:
 - single X URL -> normalized local content bundle
+- X longform articles preserve embedded code blocks and inline images from entity payloads
+- inline X article images are downloaded into bundle `assets/` and rendered on the published page
 - generic web URL -> normalized local content bundle
 - RSS/Atom feed URL -> normalized local content bundle
 - Telegram public post/channel URL -> normalized local content bundle

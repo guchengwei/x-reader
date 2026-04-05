@@ -30,14 +30,15 @@ def derive_title(text: str, external_id: str) -> str:
     return f"X post {external_id}"
 
 
-def render_markdown(doc: NormalizedDocument) -> str:
+def render_markdown(doc: NormalizedDocument, body: str | None = None) -> str:
     created = doc.created_at or "unknown"
+    body_source = body if body is not None else doc.text
     return (
         f"# {doc.title}\n\n"
         f"- Source: {doc.canonical_url}\n"
         f"- Author: @{doc.author_handle}\n"
         f"- Created: {created}\n\n"
-        f"{doc.text}\n"
+        f"{body_source}\n"
     )
 
 

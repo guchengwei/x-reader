@@ -38,7 +38,7 @@ class XConnector(BaseConnector):
             text=raw["text"],
             markdown="",
             summary=None,
-            assets=raw.get("media", []),
+            assets=raw.get("assets", []),
             metadata={
                 "platform": "x",
                 "tweet_id": raw["tweet_id"],
@@ -54,5 +54,5 @@ class XConnector(BaseConnector):
                 "runtime_version": "0.1.0",
             },
         )
-        doc.markdown = render_markdown(doc)
+        doc.markdown = render_markdown(doc, body=raw.get("markdown") or raw["text"])
         return doc

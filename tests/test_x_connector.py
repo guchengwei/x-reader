@@ -11,7 +11,7 @@ def test_parse_fxtwitter_payload_extracts_minimum_fields():
     assert raw["tweet_id"]
     assert raw["screen_name"]
     assert raw["text"]
-
+    assert raw["markdown"]
 
 
 def test_x_connector_normalizes_fixture_payload():
@@ -26,3 +26,4 @@ def test_x_connector_normalizes_fixture_payload():
     assert doc.author_handle == "alice"
     assert doc.metadata["platform"] == "x"
     assert doc.lineage["backend"] == "fxtwitter"
+    assert "# hello from fixture" in doc.markdown.lower()
