@@ -53,8 +53,12 @@ def sync_bundle_to_repo(
     for name in REQUIRED_BUNDLE_FILES:
         _copy_path(bundle_path / name, destination_dir / name)
 
-    site_destination_path = repo_path / publish_target.site_subdir / "d" / slug / "index.html"
+    site_destination_dir = repo_path / publish_target.site_subdir / "d" / slug
+    site_destination_path = site_destination_dir / "index.html"
     _copy_path(rendered_page, site_destination_path)
+    rendered_assets_dir = rendered_page.parent / "assets"
+    if rendered_assets_dir.exists():
+        _copy_path(rendered_assets_dir, site_destination_dir / "assets")
 
     publish_payload = {
         "published": False,

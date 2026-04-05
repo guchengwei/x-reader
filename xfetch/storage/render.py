@@ -4,14 +4,26 @@ import html
 import json
 from pathlib import Path
 import re
+import shutil
 
 _IMAGE_LINE_RE = re.compile(r"^!\[(?P<alt>.*?)\]\((?P<src>[^)]+)\)$")
 _HEADING_RE = re.compile(r"^(?P<level>#{1,6})\s+(?P<text>.+)$")
 
 
-def _site_asset_path(bundle_dir: Path, src: str) -> str:
+def _copy_site_assets(bundle_dir: Path, page_dir: Path) -> None:
+    source_assets = bundle_dir / "assets"
+    if not source_assets.exists():
+        return
+    target_assets = page_dir / "assets"
+    if target_assets.exists():
+        shutil.rmtree(target_assets)
+    shutil.copytree(source_assets, target_assets)
+
+
+
+def _site_asset_path(src: str) -> str:
     if src.startswith("assets/"):
-        return f"../../content/{bundle_dir.parent.name}/{bundle_dir.name}/{src}"
+        return src
     return src
 
 
@@ -23,7 +35,7 @@ def _flush_paragraph(lines: list[str], chunks: list[str]) -> None:
     lines.clear()
 
 
-def _render_markdown_body(markdown: str, bundle_dir: Path) -> str:
+def _render_markdown_body(markdown: str) -> str:
     chunks: list[str] = []
     paragraph_lines: list[str] = []
     code_lines: list[str] = []
@@ -54,7 +66,7 @@ def _render_markdown_body(markdown: str, bundle_dir: Path) -> str:
         if image_match:
             _flush_paragraph(paragraph_lines, chunks)
             alt = html.escape(image_match.group("alt"))
-            src = html.escape(_site_asset_path(bundle_dir, image_match.group("src")))
+            src = html.escape(_site_asset_path(image_match.group("src")))
             chunks.append(f'<p><img src="{src}" alt="{alt}"></p>')
             continue
 
@@ -89,10 +101,11 @@ def render_bundle_page(bundle_dir: Path, site_root: Path, public_url: str | None
     created_at = document.get("created_at") or "unknown"
     markdown_source = document.get("markdown") or ""
     if markdown_source:
-        rendered_body = _render_markdown_body(markdown_source, bundle_dir)
+        rendered_body = _render_markdown_body(markdown_source)
     else:
         body_source = document.get("text") or ""
         rendered_body = f"<div>{html.escape(body_source).replace(chr(10), '<br>\n')}</div>"
+    _copy_site_assets(bundle_dir, page_path.parent)
     canonical_tag = f'<link rel="canonical" href="{html.escape(public_url)}">\n' if public_url else ""
 
     rendered = (

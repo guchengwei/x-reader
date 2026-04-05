@@ -31,7 +31,9 @@ def _make_bundle(root: Path) -> Path:
 def _make_rendered_page(root: Path) -> Path:
     page = root / "site" / "d" / "x-123-alice" / "index.html"
     page.parent.mkdir(parents=True)
-    page.write_text("<html><title>Hello</title></html>\n", encoding="utf-8")
+    (page.parent / "assets").mkdir()
+    (page.parent / "assets" / "image.jpg").write_text("rendered-image", encoding="utf-8")
+    page.write_text("<html><title>Hello</title><img src=\"assets/image.jpg\"></html>\n", encoding="utf-8")
     return page
 
 
@@ -60,6 +62,7 @@ def test_sync_bundle_to_repo_copies_bundle_into_target_subdir(tmp_path):
     assert (dest_dir / "publish.json").exists()
     assert (dest_dir / "assets" / "image.jpg").exists()
     assert site_page.exists()
+    assert (site_page.parent / "assets" / "image.jpg").exists()
 
 
 
