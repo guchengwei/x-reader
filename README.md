@@ -116,11 +116,62 @@ python -m xfetch --help
 ```
 
 Primary commands:
+- save
 - ingest
 - sync
 - publish
 
-### 1) Ingest
+### 1) Save
+
+`save` is the canonical one-shot command for Hermes and other callers. It writes the local bundle and, when publish configuration is available, also publishes it.
+
+Minimal local save:
+
+```bash
+python -m xfetch save "https://x.com/jack/status/20"
+python -m xfetch save "https://x.com/jack/status/20" --json
+```
+
+Explicit publish target:
+
+```bash
+python -m xfetch save "https://x.com/jack/status/20" \
+  --content-root /Users/zion/xfetch/content-out \
+  --target-repo /Users/zion/link-vault-publish \
+  --repo-owner guchengwei \
+  --repo-name link-vault \
+  --json
+```
+
+Env-driven publish defaults:
+
+```bash
+export XFETCH_TARGET_REPO='/Users/zion/link-vault-publish'
+export XFETCH_REPO_OWNER='guchengwei'
+export XFETCH_REPO_NAME='link-vault'
+
+python -m xfetch save "https://x.com/jack/status/20" \
+  --content-root /Users/zion/xfetch/content-out \
+  --json
+```
+
+Optional env overrides:
+- `XFETCH_BRANCH`
+- `XFETCH_CONTENT_SUBDIR`
+- `XFETCH_SITE_SUBDIR`
+
+JSON output includes:
+- `ok`
+- `url`
+- `title`
+- `source_type`
+- `bundle_dir`
+- `published`
+- `publish_status`
+- `public_url`
+- `revision`
+
+### 2) Ingest
 
 Ingest writes a local normalized bundle.
 
@@ -147,7 +198,7 @@ If needed, you can override where bundles are written:
 python -m xfetch ingest "https://x.com/jack/status/20" --content-root ./content-out
 ```
 
-### 2) Sync
+### 3) Sync
 
 Sync copies a bundle and its rendered site output into a target repo working tree, but does not commit or push.
 
@@ -158,7 +209,7 @@ python -m xfetch sync ./content-out/2006-03/x-20-jack \
   --repo-name link-vault
 ```
 
-### 3) Publish
+### 4) Publish
 
 Publish performs the sync, updates publish metadata, commits the target repo, and pushes it.
 
