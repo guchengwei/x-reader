@@ -57,29 +57,10 @@ def _extract_player_response(html: str) -> dict | None:
     start = html.find("{", match.end())
     if start < 0:
         return None
-
-    depth = 0
-    in_string = False
-    escaped = False
-    for index in range(start, len(html)):
-        char = html[index]
-        if in_string:
-            if escaped:
-                escaped = False
-            elif char == "\\":
-                escaped = True
-            elif char == '"':
-                in_string = False
-            continue
-        if char == '"':
-            in_string = True
-        elif char == "{":
-            depth += 1
-        elif char == "}":
-            depth -= 1
-            if depth == 0:
-                return json.loads(html[start:index + 1])
-    return None
+    try:
+        return json.JSONDecoder().raw_decode(html[start:])[0]
+    except json.JSONDecodeError:
+        return None
 
 
 def _caption_tracks(player_response: dict | None) -> list[dict]:
@@ -112,8 +93,7 @@ def _fetch_transcript(track: dict) -> str:
     payload = json.loads(body)
     lines = []
     for event in payload.get("events", []):
-        segments = event.get("segs") or []
-        text = "".join(str(segment.get("utf8", "")) for segment in segments)
+        text = "".join(str(segment.get("utf8", "")) for segment in event.get("segs") or [])
         text = unescape(text).strip()
         if text:
             lines.append(text)
