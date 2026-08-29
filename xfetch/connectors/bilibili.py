@@ -30,6 +30,12 @@ def _extract_bvid(url: str) -> str | None:
     return match.group(1) if match else None
 
 
+def _resolve_b23_url(url: str) -> str:
+    request = Request(url, headers=_HEADERS)
+    with urlopen(request, timeout=10) as response:
+        return response.geturl()
+
+
 def _fetch_json(url: str, timeout: int = 10) -> tuple[dict, str]:
     request = Request(url, headers=_HEADERS)
     with urlopen(request, timeout=timeout) as response:
@@ -76,10 +82,10 @@ class BilibiliConnector(BaseConnector):
         return bool(_BILIBILI_URL_RE.match(url))
 
     def fetch(self, url: str) -> NormalizedDocument:
-        bvid = _extract_bvid(url)
-        if not bvid:
-            parsed = urlparse(url)
-            bvid = parsed.path.strip("/") or None
+        resolved_url = url
+        if urlparse(url).hostname == "b23.tv" and not _extract_bvid(url):
+            resolved_url = _resolve_b23_url(url)
+        bvid = _extract_bvid(resolved_url)
         if not bvid:
             raise ValueError(f"Cannot extract Bilibili BV ID from {url}")
 
