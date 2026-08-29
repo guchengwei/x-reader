@@ -23,7 +23,7 @@ def _init_repo(tmp_path: Path) -> tuple[Path, Path]:
     remote = tmp_path / "remote.git"
     subprocess.run(["git", "init", "--bare", str(remote)], check=True, capture_output=True)
     target_repo = tmp_path / "target-repo"
-    subprocess.run(["git", "init", str(target_repo)], check=True, capture_output=True)
+    subprocess.run(["git", "init", "-b", "main", str(target_repo)], check=True, capture_output=True)
     _git("config", "user.name", "Hermes Agent", cwd=target_repo)
     _git("config", "user.email", "hermes@example.com", cwd=target_repo)
     _git("remote", "add", "origin", str(remote), cwd=target_repo)
@@ -65,3 +65,32 @@ def test_publish_repo_rejects_unrelated_pre_staged_changes(tmp_path):
     _git("add", "notes.txt", cwd=target_repo)
     with pytest.raises(RuntimeError, match="unrelated staged"):
         publish_repo(target_repo, branch="main", commit_message="publish item", paths=["content/item"])
+
+
+def test_publish_repo_rejects_unrelated_local_commits(tmp_path):
+    target_repo, remote = _init_repo(tmp_path)
+    (target_repo / "seed.txt").write_text("seed\n", encoding="utf-8")
+    publish_repo(target_repo, branch="main", commit_message="seed", paths=["seed.txt"])
+
+    (target_repo / "notes.txt").write_text("local only\n", encoding="utf-8")
+    _git("add", "notes.txt", cwd=target_repo)
+    _git("commit", "-m", "local work", cwd=target_repo)
+    remote_before = subprocess.run(
+        ["git", "--git-dir", str(remote), "rev-parse", "refs/heads/main"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+
+    (target_repo / "content/item").mkdir(parents=True)
+    (target_repo / "content/item/document.json").write_text("{}\n", encoding="utf-8")
+    with pytest.raises(RuntimeError, match="exactly at origin/main"):
+        publish_repo(target_repo, branch="main", commit_message="publish: item", paths=["content/item"])
+
+    remote_after = subprocess.run(
+        ["git", "--git-dir", str(remote), "rev-parse", "refs/heads/main"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    assert remote_after == remote_before

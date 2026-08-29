@@ -13,9 +13,7 @@ def test_parse_fxtwitter_payload_falls_back_to_raw_text_when_text_empty():
             "media": {"all": []},
         }
     }
-
     result = parse_fxtwitter_payload(payload)
-
     assert result["text"] == "hello from raw text"
 
 
@@ -42,9 +40,7 @@ def test_parse_fxtwitter_payload_uses_article_content_when_post_is_article():
             "media": {"all": []},
         }
     }
-
     result = parse_fxtwitter_payload(payload)
-
     assert "Article title" in result["text"]
     assert "Heading" in result["text"]
     assert "Paragraph one" in result["text"]
@@ -70,24 +66,14 @@ def test_parse_fxtwitter_payload_preserves_markdown_entities_in_article_blocks()
                         {"type": "unstyled", "text": "Outro paragraph"},
                     ],
                     "entityMap": [
-                        {
-                            "key": "0",
-                            "value": {
-                                "type": "MARKDOWN",
-                                "data": {
-                                    "markdown": "```python\nprint('hello')\n```"
-                                },
-                            },
-                        }
+                        {"key": "0", "value": {"type": "MARKDOWN", "data": {"markdown": "```python\nprint('hello')\n```"}}}
                     ],
                 },
             },
             "media": {"all": []},
         }
     }
-
     result = parse_fxtwitter_payload(payload)
-
     assert "Intro paragraph" in result["text"]
     assert "```python" in result["text"]
     assert "print('hello')" in result["text"]
@@ -114,33 +100,56 @@ def test_parse_fxtwitter_payload_preserves_inline_article_images_and_assets():
                         {"type": "unstyled", "text": "After image"},
                     ],
                     "entityMap": [
-                        {
-                            "key": "0",
-                            "value": {
-                                "type": "MEDIA",
-                                "data": {
-                                    "mediaItems": [
-                                        {"mediaId": "999"}
-                                    ]
-                                },
-                            },
-                        }
+                        {"key": "0", "value": {"type": "MEDIA", "data": {"mediaItems": [{"mediaId": "999"}]}}}
                     ],
                 },
                 "media_entities": [
-                    {
-                        "media_id": "999",
-                        "media_info": {"original_img_url": image_url},
-                    }
+                    {"media_id": "999", "media_info": {"original_img_url": image_url}}
                 ],
             },
             "media": {"all": []},
         }
     }
-
     result = parse_fxtwitter_payload(payload)
-
     assert "Before image" in result["markdown"]
     assert f"![]({image_url})" in result["markdown"]
     assert result["markdown"].index("Before image") < result["markdown"].index(f"![]({image_url})") < result["markdown"].index("After image")
     assert result["assets"] == [{"url": image_url, "type": "image", "source": "article_inline", "media_id": "999"}]
+
+
+def test_parse_fxtwitter_payload_preserves_normal_tweet_photos():
+    image_url = "https://pbs.twimg.com/media/photo-1.jpg"
+    payload = {
+        "tweet": {
+            "id": "123",
+            "url": "https://x.com/alice/status/123",
+            "text": "photo post",
+            "raw_text": {"text": "photo post"},
+            "author": {"screen_name": "alice", "name": "Alice"},
+            "media": {
+                "photos": [{"id": "m1", "type": "photo", "url": image_url}],
+                "all": [{"id": "m1", "type": "photo", "url": image_url}],
+            },
+        }
+    }
+    result = parse_fxtwitter_payload(payload)
+    assert result["assets"] == [{"url": image_url, "type": "image", "source": "tweet_media", "media_id": "m1"}]
+    assert result["has_unpreserved_video"] is False
+
+
+def test_parse_fxtwitter_payload_marks_video_as_unpreserved():
+    payload = {
+        "tweet": {
+            "id": "123",
+            "url": "https://x.com/alice/status/123",
+            "text": "video post",
+            "raw_text": {"text": "video post"},
+            "author": {"screen_name": "alice", "name": "Alice"},
+            "media": {
+                "videos": [{"id": "v1", "type": "video", "url": "https://video.twimg.com/video.mp4"}],
+                "all": [{"id": "v1", "type": "video", "url": "https://video.twimg.com/video.mp4"}],
+            },
+        }
+    }
+    result = parse_fxtwitter_payload(payload)
+    assert result["has_unpreserved_video"] is True

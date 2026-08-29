@@ -26,7 +26,7 @@ def test_x_connector_normalizes_fixture_payload():
     assert "# hello from fixture" in doc.markdown.lower()
 
 
-def test_x_connector_uses_partial_oembed_fallback(monkeypatch):
+def test_x_connector_uses_partial_oembed_fallback_with_stable_handle(monkeypatch):
     monkeypatch.setattr("xfetch.connectors.x.fetch_fxtwitter_json", lambda url: (_ for _ in ()).throw(RuntimeError("down")))
     monkeypatch.setattr(
         "xfetch.connectors.x.fetch_oembed_json",
@@ -34,5 +34,22 @@ def test_x_connector_uses_partial_oembed_fallback(monkeypatch):
     )
     doc = XConnector().fetch("https://x.com/alice/status/123")
     assert doc.capture_status == "partial"
+    assert doc.author_handle == "alice"
     assert doc.lineage["backend"] == "oembed"
     assert doc.metadata["fallback_from"] == "fxtwitter"
+
+
+def test_x_connector_marks_video_post_partial():
+    payload = {
+        "tweet": {
+            "id": "123",
+            "url": "https://x.com/alice/status/123",
+            "text": "video post",
+            "raw_text": {"text": "video post"},
+            "author": {"screen_name": "alice", "name": "Alice"},
+            "media": {"videos": [{"type": "video", "url": "https://video.twimg.com/video.mp4"}]},
+        }
+    }
+    doc = XConnector().normalize_payload("https://x.com/alice/status/123", payload)
+    assert doc.capture_status == "partial"
+    assert doc.metadata["unpreserved_media"] == ["video"]

@@ -41,17 +41,36 @@ def _assert_no_unrelated_staged_changes(repo: Path, allowed: list[str]) -> None:
         raise RuntimeError("target repo already has unrelated staged changes: " + ", ".join(unexpected))
 
 
-def _assert_remote_not_ahead(repo: Path, branch: str) -> None:
+def assert_publish_base(target_repo: Path, branch: str) -> None:
+    repo = Path(target_repo).resolve()
+    if not (repo / ".git").exists():
+        raise FileNotFoundError(f"not a git repo: {repo}")
+
     probe = _run_git(repo, "ls-remote", "--exit-code", "--heads", "origin", branch, check=False)
     if probe.returncode != 0:
-        return
+        local = _run_git(repo, "rev-parse", "--verify", "HEAD", check=False)
+        if local.returncode != 0:
+            return
+        count = _stdout(repo, "rev-list", "--count", "HEAD")
+        subject = _stdout(repo, "log", "-1", "--format=%s")
+        if count == "1" and subject.startswith("publish: "):
+            return
+        raise RuntimeError(f"origin/{branch} does not exist but target repo already has local commits")
+
+    current = _run_git(repo, "symbolic-ref", "--quiet", "--short", "HEAD", check=False)
+    current_branch = current.stdout.strip()
+    if current.returncode != 0 or current_branch != branch:
+        raise RuntimeError(f"target repo must be on branch {branch}; current branch is {current_branch or '<detached>'}")
+
     _stdout(repo, "fetch", "origin", f"{branch}:refs/remotes/origin/{branch}")
-    local = _run_git(repo, "rev-parse", "--verify", "HEAD", check=False)
-    if local.returncode != 0:
-        raise RuntimeError(f"remote branch origin/{branch} exists but local target repo has no HEAD")
-    ancestry = _run_git(repo, "merge-base", "--is-ancestor", f"origin/{branch}", "HEAD", check=False)
-    if ancestry.returncode != 0:
-        raise RuntimeError(f"target repo is behind or diverged from origin/{branch}; update it before publishing")
+    local = _stdout(repo, "rev-parse", "HEAD")
+    remote = _stdout(repo, "rev-parse", f"origin/{branch}")
+    if local != remote:
+        ahead = _stdout(repo, "rev-list", "--count", f"origin/{branch}..HEAD")
+        subject = _stdout(repo, "log", "-1", "--format=%s")
+        if ahead == "1" and subject.startswith("publish: "):
+            return
+        raise RuntimeError(f"target repo must be exactly at origin/{branch} before publishing")
 
 
 def commit_repo(target_repo: Path, branch: str, commit_message: str, paths: list[str | Path]) -> str:
@@ -61,7 +80,7 @@ def commit_repo(target_repo: Path, branch: str, commit_message: str, paths: list
 
     allowed = _normalize_paths(repo, paths)
     _assert_no_unrelated_staged_changes(repo, allowed)
-    _assert_remote_not_ahead(repo, branch)
+    assert_publish_base(repo, branch)
     _stdout(repo, "add", "--", *allowed)
     staged = _stdout(repo, "diff", "--cached", "--name-only")
     if staged:

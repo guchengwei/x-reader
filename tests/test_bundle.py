@@ -71,3 +71,34 @@ def test_asset_failure_downgrades_complete_capture(tmp_path, monkeypatch):
     assert document["capture_status"] == "partial"
     assert document["metadata"]["asset_capture_failures"] == 1
     assert document["assets"][0]["capture_error"] == "blocked asset"
+
+
+def test_rewrite_replaces_old_assets_and_publication_receipt(tmp_path, monkeypatch):
+    monkeypatch.setattr(bundle_module, "_download_asset", lambda url, timeout=20: (url.encode(), "image/jpeg"))
+    cfg = RuntimeConfig(content_root=tmp_path, site_root=tmp_path / "site")
+
+    first = _doc(
+        markdown="# hello\n\n![](https://example.com/one.jpg)\n![](https://example.com/two.jpg)\n",
+        assets=[
+            {"url": "https://example.com/one.jpg", "type": "image"},
+            {"url": "https://example.com/two.jpg", "type": "image"},
+        ],
+        content_kinds=["text", "images"],
+    )
+    bundle_dir = write_bundle(first, cfg)
+    (bundle_dir / "publication.json").write_text('{"published": true}\n', encoding="utf-8")
+    assert (bundle_dir / "assets" / "image-02.jpg").exists()
+
+    second = _doc(
+        markdown="# hello again\n\n![](https://example.com/one.jpg)\n",
+        assets=[{"url": "https://example.com/one.jpg", "type": "image"}],
+        content_kinds=["text", "images"],
+    )
+    rewritten = write_bundle(second, cfg)
+
+    assert rewritten == bundle_dir
+    assert (rewritten / "assets" / "image-01.jpg").exists()
+    assert not (rewritten / "assets" / "image-02.jpg").exists()
+    assert not (rewritten / "publication.json").exists()
+    publish = json.loads((rewritten / "publish.json").read_text(encoding="utf-8"))
+    assert publish["published"] is False

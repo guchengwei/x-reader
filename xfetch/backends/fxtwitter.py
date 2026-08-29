@@ -48,6 +48,7 @@ def parse_oembed_payload(payload: dict, source_url: str) -> dict:
         "language": None,
         "stats": {},
         "assets": [],
+        "has_unpreserved_video": False,
     }
 
 
@@ -148,8 +149,29 @@ def _extract_block_parts(block: dict, entity_map: dict[str, dict], media_map: di
                 media_url = media_map.get(media_id)
                 if media_url:
                     markdown_parts.append(f"![]({media_url})")
-                    _append_asset_deduped(assets, asset_urls, {"url": media_url, "type": "image", "source": "article_inline", "media_id": media_id})
+                    _append_asset_deduped(
+                        assets,
+                        asset_urls,
+                        {"url": media_url, "type": "image", "source": "article_inline", "media_id": media_id},
+                    )
     return "\n\n".join(text_parts), "\n\n".join(markdown_parts), assets
+
+
+def _media_info_is_video(media_entry: dict | None) -> bool:
+    if not isinstance(media_entry, dict):
+        return False
+    media_info = media_entry.get("media_info") or {}
+    typename = str(media_info.get("__typename") or "").lower()
+    media_type = str(media_info.get("type") or media_entry.get("type") or "").lower()
+    return typename in {"apivideo", "apigif"} or media_type in {"video", "animated_gif", "gif"}
+
+
+def _article_has_video(article: dict | None) -> bool:
+    if not article:
+        return False
+    if _media_info_is_video(article.get("cover_media")):
+        return True
+    return any(_media_info_is_video(item) for item in (article.get("media_entities") or []))
 
 
 def _extract_article_content(article: dict | None) -> tuple[str, str, list[dict]]:
@@ -186,17 +208,70 @@ def _extract_article_content(article: dict | None) -> tuple[str, str, list[dict]
     return "\n\n".join(text_parts), "\n\n".join(markdown_parts), assets
 
 
+def _extract_tweet_media(tweet: dict) -> tuple[list[dict], bool]:
+    media = tweet.get("media") or {}
+    assets: list[dict] = []
+    seen_urls: set[str] = set()
+    has_video = bool(media.get("videos"))
+
+    for item in media.get("photos") or []:
+        if not isinstance(item, dict):
+            continue
+        media_type = str(item.get("type") or "photo").lower()
+        if media_type == "gif":
+            has_video = True
+            continue
+        url = str(item.get("url") or "").strip()
+        if url:
+            _append_asset_deduped(
+                assets,
+                seen_urls,
+                {"url": url, "type": "image", "source": "tweet_media", "media_id": str(item.get("id") or "")},
+            )
+
+    for item in media.get("all") or []:
+        if not isinstance(item, dict):
+            continue
+        media_type = str(item.get("type") or "").lower()
+        if media_type in {"video", "gif", "animated_gif"}:
+            has_video = True
+            continue
+        if media_type not in {"photo", "mosaic_photo"}:
+            continue
+        url = str(item.get("url") or "").strip()
+        if url:
+            _append_asset_deduped(
+                assets,
+                seen_urls,
+                {"url": url, "type": "image", "source": "tweet_media", "media_id": str(item.get("id") or "")},
+            )
+
+    external = media.get("external") or {}
+    if isinstance(external, dict) and str(external.get("type") or "").lower() == "video":
+        has_video = True
+
+    return assets, has_video
+
+
 def parse_fxtwitter_payload(payload: dict) -> dict:
     tweet = payload.get("tweet") or {}
     author = tweet.get("author") or {}
     canonical_url = tweet.get("url") or ""
     tweet_id = str(tweet.get("id") or "")
     raw_text = ((tweet.get("raw_text") or {}).get("text") or "").strip()
-    article_text, article_markdown, article_assets = _extract_article_content(tweet.get("article"))
+    article = tweet.get("article")
+    article_text, article_markdown, article_assets = _extract_article_content(article)
+    tweet_assets, tweet_has_video = _extract_tweet_media(tweet)
     text = (tweet.get("text") or "").strip()
     if not text or text == raw_text:
         text = article_text or raw_text or text
     markdown = article_markdown or text
+
+    assets: list[dict] = []
+    seen_urls: set[str] = set()
+    for asset in [*article_assets, *tweet_assets]:
+        _append_asset_deduped(assets, seen_urls, asset)
+
     return {
         "tweet_id": tweet_id,
         "canonical_url": canonical_url,
@@ -207,5 +282,6 @@ def parse_fxtwitter_payload(payload: dict) -> dict:
         "created_at": _normalize_created_at(tweet.get("created_at")),
         "language": tweet.get("lang") or None,
         "stats": {"likes": tweet.get("likes", 0), "retweets": tweet.get("retweets", 0), "replies": tweet.get("replies", 0), "views": tweet.get("views", 0)},
-        "assets": article_assets,
+        "assets": assets,
+        "has_unpreserved_video": tweet_has_video or _article_has_video(article),
     }
