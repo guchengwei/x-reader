@@ -74,7 +74,7 @@ Install locally:
 
 ```bash
 pip install -e .[dev]
-python -m xfetch --help
+xfetch --help
 ```
 
 ### Save
