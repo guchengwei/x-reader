@@ -19,7 +19,7 @@ fetch → normalize → bundle
               static hosting
 ```
 
-The runtime repository owns fetching, normalization, bundle creation, rendering, and publication mechanics. The target repository owns the durable published artifacts and any higher-level index/search experience.
+The runtime repository owns fetching, normalization, bundle creation, and publication mechanics. The target repository owns rendering, durable published artifacts, and any higher-level index/search experience.
 
 ## Capture contract
 
@@ -99,7 +99,6 @@ Optional environment overrides:
 
 - `XFETCH_BRANCH`
 - `XFETCH_CONTENT_SUBDIR`
-- `XFETCH_SITE_SUBDIR`
 - `XFETCH_CONTENT_ROOT`
 
 JSON output includes capture quality plus publication state:
@@ -135,7 +134,7 @@ python -m xfetch sync ./content-out/2026-08/web-example \
   --repo-name repo
 ```
 
-Copies the bundle and rendered page into a target working tree without committing.
+Copies the bundle into a target working tree without committing.
 
 ### Publish
 
@@ -146,7 +145,7 @@ python -m xfetch publish ./content-out/2026-08/web-example \
   --repo-name repo
 ```
 
-Publication stages only the generated bundle/site paths. Unrelated dirty files are left untouched, and unrelated pre-staged changes cause publication to fail instead of being swept into a content commit.
+Publication stages only the generated bundle path. Unrelated dirty files are left untouched, and unrelated pre-staged changes cause publication to fail instead of being swept into a content commit.
 
 The publisher creates a content commit, records that immutable content revision in `publish.json`/`publication.json`, creates a receipt commit locally, then pushes both commits in one push. This avoids the self-referential problem of trying to place a commit's own SHA inside itself.
 
@@ -154,7 +153,7 @@ For an existing remote branch, the target checkout must start exactly at `origin
 
 ## Rendering
 
-xfetch keeps a small dependency-free static renderer for prepared Pages output. It handles headings, paragraphs, fenced code, images, ordered/unordered lists, blockquotes, links, inline code, and bold text. The normalized bundle remains the durable source of truth; consumers are free to render it differently.
+xfetch keeps a small dependency-free renderer for local preview/export. It handles headings, paragraphs, fenced code, images, ordered/unordered lists, blockquotes, links, inline code, and bold text. Publication does not copy rendered pages into the target repository; the normalized bundle remains the durable source of truth and the target owns presentation.
 
 ## Upstream relationship
 
