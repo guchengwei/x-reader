@@ -31,7 +31,7 @@ def _extract_video_id(url: str) -> str | None:
     qs = parse_qs(parsed.query)
     if qs.get("v"):
         return qs["v"][0]
-    match = re.search(r"/embed/([^/?#]+)", parsed.path)
+    match = re.search(r"/(?:embed|shorts|live)/([^/?#]+)", parsed.path)
     return match.group(1) if match else None
 
 
@@ -106,11 +106,17 @@ def _fetch_transcript(track: dict) -> str:
 class YouTubeConnector(BaseConnector):
     def can_handle(self, url: str) -> bool:
         parsed = urlparse(url)
-        return bool(parsed.scheme in {"http", "https"} and _YOUTUBE_HOST_RE.search(parsed.netloc))
+        return bool(
+            parsed.scheme in {"http", "https"}
+            and _YOUTUBE_HOST_RE.search(parsed.netloc)
+            and _extract_video_id(url)
+        )
 
     def fetch(self, url: str) -> NormalizedDocument:
         html, canonical_url, content_type = _fetch_html(url)
-        video_id = _extract_video_id(canonical_url) or _extract_video_id(url) or "youtube"
+        video_id = _extract_video_id(canonical_url) or _extract_video_id(url)
+        if not video_id:
+            raise ValueError(f"Cannot extract YouTube video ID from {url}")
         title = _extract_meta(html, "property", "og:title") or f"YouTube video {video_id}"
         author = _extract_meta(html, "name", "author") or "unknown"
         description = _extract_meta(html, "property", "og:description") or title
