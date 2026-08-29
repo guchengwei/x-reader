@@ -110,12 +110,13 @@ class WeChatConnector(BaseConnector):
 
     def fetch(self, url: str) -> NormalizedDocument:
         html, canonical_url, content_type = _fetch_html(url)
+        if _looks_blocked(html):
+            raise ValueError("WeChat returned an anti-scraping verification page")
+
         parser = _WeChatContentParser()
         parser.feed(html)
         parser.close()
         text = parser.text_content()
-        if not text and _looks_blocked(html):
-            raise ValueError("WeChat returned an anti-scraping verification page")
 
         title = _extract_first(r'<meta\s+property=["\']og:title["\']\s+content=["\']([^"\']*)["\']', html)
         if not title:

@@ -5,6 +5,8 @@ import json
 import mimetypes
 from pathlib import Path
 import re
+import shutil
+import tempfile
 from urllib.parse import urlparse
 from urllib.request import Request
 
@@ -92,31 +94,58 @@ def _materialize_assets(doc: NormalizedDocument, assets_dir: Path) -> None:
             doc.capture_status = "partial"
 
 
+def _replace_bundle(temp_dir: Path, bundle_dir: Path) -> None:
+    backup_dir = bundle_dir.with_name(f".{bundle_dir.name}.old")
+    if backup_dir.exists():
+        shutil.rmtree(backup_dir)
+    if bundle_dir.exists():
+        bundle_dir.replace(backup_dir)
+    try:
+        temp_dir.replace(bundle_dir)
+    except Exception:
+        if backup_dir.exists() and not bundle_dir.exists():
+            backup_dir.replace(bundle_dir)
+        raise
+    finally:
+        if backup_dir.exists():
+            shutil.rmtree(backup_dir)
+
+
 def write_bundle(doc: NormalizedDocument, config: RuntimeConfig) -> Path:
     month = bundle_month(doc.created_at, doc.lineage.get("fetched_at"))
     slug = build_slug(doc.source_type, doc.external_id, doc.author_handle)
-    bundle_dir = config.content_root / month / slug
-    assets_dir = bundle_dir / "assets"
+    month_dir = config.content_root / month
+    month_dir.mkdir(parents=True, exist_ok=True)
+    bundle_dir = month_dir / slug
+    temp_dir = Path(tempfile.mkdtemp(prefix=f".{slug}.", dir=month_dir))
+    assets_dir = temp_dir / "assets"
     assets_dir.mkdir(parents=True, exist_ok=True)
 
-    _materialize_assets(doc, assets_dir)
+    try:
+        _materialize_assets(doc, assets_dir)
 
-    (bundle_dir / "document.json").write_text(
-        json.dumps(document_to_dict(doc), ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
-    (bundle_dir / "index.md").write_text(doc.markdown, encoding="utf-8")
-    (bundle_dir / "publish.json").write_text(
-        json.dumps(
-            {
-                "published": False,
-                "public_url": None,
-                "target": None,
-                "revision": None,
-            },
-            ensure_ascii=False,
-            indent=2,
-        ) + "\n",
-        encoding="utf-8",
-    )
+        (temp_dir / "document.json").write_text(
+            json.dumps(document_to_dict(doc), ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        (temp_dir / "index.md").write_text(doc.markdown, encoding="utf-8")
+        (temp_dir / "publish.json").write_text(
+            json.dumps(
+                {
+                    "published": False,
+                    "public_url": None,
+                    "target": None,
+                    "revision": None,
+                },
+                ensure_ascii=False,
+                indent=2,
+            ) + "\n",
+            encoding="utf-8",
+        )
+        _replace_bundle(temp_dir, bundle_dir)
+    except Exception:
+        if temp_dir.exists():
+            shutil.rmtree(temp_dir)
+        raise
+
     return bundle_dir

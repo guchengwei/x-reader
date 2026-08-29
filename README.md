@@ -49,12 +49,12 @@ Asset download failures are not silently ignored: the affected asset records a `
 
 | Source | Current capture level |
 |---|---|
-| X status | `complete` through FxTwitter when available; validated oEmbed fallback is `partial` |
+| X status | `complete` for preserved text/photos through FxTwitter; posts with unpreserved video and oEmbed fallback are `partial` |
 | Generic web | `partial` main/article-oriented text extraction |
 | RSS / Atom | `complete` when a full content element is present, otherwise `partial` |
 | Public Telegram | `partial` OpenGraph post representation |
 | WeChat | article text/images when public HTML is available; verification pages fail explicitly |
-| Xiaohongshu | note text/images when public initial state is available; login walls fail explicitly |
+| Xiaohongshu | image notes can be `complete`; video notes are `partial` until video preservation exists; login walls fail explicitly |
 | YouTube | `metadata_only` |
 | Bilibili | `metadata_only` |
 
@@ -150,7 +150,7 @@ Publication stages only the generated bundle/site paths. Unrelated dirty files a
 
 The publisher creates a content commit, records that immutable content revision in `publish.json`/`publication.json`, creates a receipt commit locally, then pushes both commits in one push. This avoids the self-referential problem of trying to place a commit's own SHA inside itself.
 
-If the remote target branch has commits not contained in the local target working tree, publication fails and requires the target checkout to be updated first.
+For an existing remote branch, the target checkout must start exactly at `origin/<branch>` before publication. This prevents unrelated local commits from being swept into the publish push.
 
 ## Rendering
 

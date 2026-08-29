@@ -115,7 +115,16 @@ class XiaohongshuConnector(BaseConnector):
             "shares": _parse_count(interact.get("shareCount", interact.get("share_count", 0))),
         }
         created_at = _normalize_timestamp(note.get("time") or note.get("createTime"))
-        markdown = f"# {title}\n\n- Source: {canonical_url}\n- Author: {author}\n- Type: {'video' if note_type == 'video' else 'image'}\n\n{text}\n"
+        is_video = note_type == "video"
+        metadata = {
+            "platform": "xiaohongshu",
+            "note_type": "video" if is_video else "image",
+            "stats": stats,
+            "content_type": content_type,
+        }
+        if is_video:
+            metadata["unpreserved_media"] = ["video"]
+        markdown = f"# {title}\n\n- Source: {canonical_url}\n- Author: {author}\n- Type: {'video' if is_video else 'image'}\n\n{text}\n"
 
         return NormalizedDocument(
             source_type="xiaohongshu",
@@ -132,8 +141,8 @@ class XiaohongshuConnector(BaseConnector):
             summary=None,
             tags=tags,
             assets=assets,
-            metadata={"platform": "xiaohongshu", "note_type": "video" if note_type == "video" else "image", "stats": stats, "content_type": content_type},
+            metadata=metadata,
             lineage={"connector": "xiaohongshu", "runtime_version": "0.2.0"},
-            capture_status="complete",
+            capture_status="partial" if is_video else "complete",
             content_kinds=["text", "images"] if assets else ["text"],
         )
