@@ -7,11 +7,14 @@
 - add `capture_status` and `content_kinds` to the normalized document contract
 - downgrade captures when durable asset materialization fails instead of silently claiming completeness
 - reject WeChat verification pages and Xiaohongshu login walls as source content
-- add a validated X oEmbed fallback when FxTwitter is unavailable
-- classify YouTube and Bilibili honestly as `metadata_only` until transcript capture exists
-- scope git publication to generated paths and reject unrelated pre-staged changes
+- add a validated X oEmbed fallback when FxTwitter is unavailable and preserve normal X photos
+- capture public YouTube captions and Bilibili subtitles as `partial` content while keeping unavailable/inaccessible transcripts `metadata_only`
+- resolve Bilibili short links and preserve YouTube Shorts/live video identity
+- replace bundles atomically so stale assets and publication receipts cannot survive re-ingest
+- scope git publication to generated bundle paths, reject unrelated staged/committed work, and require a clean remote base
 - split content revision from publication receipt metadata and push both commits together
-- render common Markdown structures including lists, links, blockquotes, code, and images
+- publish content bundles only; target repositories own rendering and presentation
+- keep the dependency-free renderer for local preview/export
 - replace the legacy agent skill description with the active xfetch interface
 - remove the runtime repo's obsolete Pages deployment workflow and add pytest CI
 
