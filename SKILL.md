@@ -25,7 +25,7 @@ export XFETCH_REPO_OWNER='owner'
 export XFETCH_REPO_NAME='repo'
 ```
 
-Optional overrides: `XFETCH_BRANCH`, `XFETCH_CONTENT_SUBDIR`, `XFETCH_SITE_SUBDIR`, `XFETCH_CONTENT_ROOT`.
+Optional overrides: `XFETCH_BRANCH`, `XFETCH_CONTENT_SUBDIR`, `XFETCH_CONTENT_ROOT`.
 
 ## Other commands
 
@@ -35,7 +35,7 @@ python -m xfetch sync <bundle-dir> --target-repo <repo> --repo-owner <owner> --r
 python -m xfetch publish <bundle-dir> --target-repo <repo> --repo-owner <owner> --repo-name <name> --json
 ```
 
-Use `ingest` only when a local bundle is desired without publication. `sync` prepares a target working tree without committing. `publish` publishes an existing bundle.
+Use `ingest` only when a local bundle is desired without publication. `sync` prepares a target working tree without committing. `publish` publishes an existing bundle. Publication copies durable bundle content only; the target repository owns rendering/presentation.
 
 ## Result semantics
 
@@ -46,7 +46,9 @@ A normalized document includes `capture_status`:
 - `metadata_only`: only metadata/description/thumbnail was captured; do not describe this as full preservation.
 - `failed`: reserved for explicit failed-capture records; normal CLI failures return non-zero instead.
 
-`content_kinds` describes what was captured, such as `text`, `images`, `metadata`, or `thumbnail`.
+`content_kinds` describes what was captured, such as `text`, `images`, `transcript`, `metadata`, or `thumbnail`.
+
+When `save --json` reports `published: true`, return its `public_url` as the saved link. Also preserve the reported `capture_status`; do not describe a `partial` or `metadata_only` result as a complete archive.
 
 After publication, `publication.json` records the content commit revision and public URL. The target repository is a content/output surface; xfetch remains the ingestion runtime.
 
@@ -58,8 +60,10 @@ After publication, `publication.json` records the content commit revision and pu
 - public Telegram URLs
 - WeChat articles
 - Xiaohongshu notes when public HTML contains the note state
-- YouTube (`metadata_only` until transcript support exists)
-- Bilibili (`metadata_only` until transcript support exists)
+- YouTube video URLs: `partial` when public captions are captured, otherwise `metadata_only`
+- Bilibili video URLs: `partial` when public subtitles are captured, otherwise `metadata_only`
+
+YouTube caption tracks can be advertised but inaccessible without additional playback tokens; keep those results `metadata_only` and report the recorded capture limitation. Bilibili subtitles that require login likewise remain `metadata_only`.
 
 If WeChat returns a verification page or Xiaohongshu returns a login wall, report the fetch failure rather than saving the interstitial as content.
 
