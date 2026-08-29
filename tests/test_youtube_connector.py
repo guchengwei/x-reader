@@ -45,6 +45,18 @@ def test_youtube_connector_extracts_metadata_from_html(monkeypatch):
     assert doc.content_kinds == ["metadata", "thumbnail"]
 
 
+def test_youtube_connector_keeps_shorts_video_identity(monkeypatch):
+    url = "https://www.youtube.com/shorts/short123"
+    html = _video_html()
+    monkeypatch.setattr("xfetch.connectors.youtube.urlopen", lambda request, timeout=15: FakeResponse(html, url))
+
+    doc = YouTubeConnector().fetch(url)
+
+    assert doc.external_id == "short123"
+    assert doc.source_url == url
+    assert doc.canonical_url == url
+
+
 def test_youtube_connector_captures_preferred_manual_transcript(monkeypatch):
     player_response = {
         "captions": {
@@ -131,8 +143,12 @@ def test_youtube_connector_falls_back_when_caption_fetch_fails(monkeypatch):
     assert "## Transcript" not in doc.markdown
 
 
-def test_youtube_connector_matches_youtube_urls_only():
+def test_youtube_connector_matches_video_urls_only():
     connector = YouTubeConnector()
     assert connector.can_handle("https://www.youtube.com/watch?v=abc123") is True
     assert connector.can_handle("https://youtu.be/abc123") is True
+    assert connector.can_handle("https://www.youtube.com/shorts/abc123") is True
+    assert connector.can_handle("https://www.youtube.com/live/abc123") is True
+    assert connector.can_handle("https://www.youtube.com/@creator") is False
+    assert connector.can_handle("https://www.youtube.com/") is False
     assert connector.can_handle("https://example.com/watch?v=abc123") is False
