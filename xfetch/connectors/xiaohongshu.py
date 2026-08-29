@@ -5,10 +5,11 @@ from html import unescape
 from hashlib import sha1
 import json
 import re
-from urllib.request import Request, urlopen
+from urllib.request import Request
 
 from xfetch.connectors.base import BaseConnector
 from xfetch.models import NormalizedDocument
+from xfetch.net import safe_urlopen as urlopen
 
 
 _XHS_URL_RE = re.compile(r"^https?://(?:www\.)?(?:xiaohongshu\.com|xhslink\.com)/", re.IGNORECASE)
@@ -36,6 +37,8 @@ def _extract_note_id(url: str) -> str | None:
 
 
 def _extract_initial_state(html: str) -> dict:
+    if "登录后推荐更懂你的笔记" in html or "小红书 - 你的生活兴趣社区" in html:
+        raise ValueError("Xiaohongshu returned a login wall; an authenticated fetch path is required")
     match = re.search(r'window\.__INITIAL_STATE__\s*=\s*({.*?})\s*;</script>', html, re.DOTALL)
     if not match:
         match = re.search(r'window\.__INITIAL_STATE__\s*=\s*({.*?})\s*;', html, re.DOTALL)
@@ -129,14 +132,8 @@ class XiaohongshuConnector(BaseConnector):
             summary=None,
             tags=tags,
             assets=assets,
-            metadata={
-                "platform": "xiaohongshu",
-                "note_type": "video" if note_type == "video" else "image",
-                "stats": stats,
-                "content_type": content_type,
-            },
-            lineage={
-                "connector": "xiaohongshu",
-                "runtime_version": "0.1.0",
-            },
+            metadata={"platform": "xiaohongshu", "note_type": "video" if note_type == "video" else "image", "stats": stats, "content_type": content_type},
+            lineage={"connector": "xiaohongshu", "runtime_version": "0.2.0"},
+            capture_status="complete",
+            content_kinds=["text", "images"] if assets else ["text"],
         )

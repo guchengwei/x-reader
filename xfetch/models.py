@@ -2,6 +2,9 @@ from dataclasses import asdict, dataclass, field
 from typing import Any
 
 
+_CAPTURE_STATUSES = {"complete", "partial", "metadata_only", "failed"}
+
+
 @dataclass(slots=True)
 class NormalizedDocument:
     source_type: str
@@ -20,6 +23,12 @@ class NormalizedDocument:
     assets: list[dict[str, Any]] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
     lineage: dict[str, Any] = field(default_factory=dict)
+    capture_status: str = "complete"
+    content_kinds: list[str] = field(default_factory=lambda: ["text"])
+
+    def __post_init__(self) -> None:
+        if self.capture_status not in _CAPTURE_STATUSES:
+            raise ValueError(f"invalid capture_status: {self.capture_status}")
 
 
 def derive_title(text: str, external_id: str) -> str:

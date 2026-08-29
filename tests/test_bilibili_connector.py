@@ -6,43 +6,18 @@ class FakeResponse:
         self._body = body.encode("utf-8")
         self._url = url
         self.headers = {"Content-Type": content_type}
-
-    def read(self):
-        return self._body
-
-    def geturl(self):
-        return self._url
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc, tb):
-        return False
+    def read(self): return self._body
+    def geturl(self): return self._url
+    def __enter__(self): return self
+    def __exit__(self, exc_type, exc, tb): return False
 
 
 def test_bilibili_connector_extracts_metadata_from_api(monkeypatch):
     payload = """
-    {
-      "code": 0,
-      "data": {
-        "title": "Bilibili Test Video",
-        "desc": "This is a bilibili description.",
-        "owner": {"name": "UP Author"},
-        "pic": "https://i0.hdslb.com/test-cover.jpg",
-        "duration": 321,
-        "stat": {"view": 12345}
-      }
-    }
+    {"code":0,"data":{"title":"Bilibili Test Video","desc":"This is a bilibili description.","owner":{"name":"UP Author"},"pic":"https://i0.hdslb.com/test-cover.jpg","duration":321,"stat":{"view":12345}}}
     """
-
-    monkeypatch.setattr(
-        "xfetch.connectors.bilibili.urlopen",
-        lambda request, timeout=10: FakeResponse(payload, "https://api.bilibili.com/x/web-interface/view?bvid=BV1xx411c7mD"),
-    )
-
-    connector = BilibiliConnector()
-    doc = connector.fetch("https://www.bilibili.com/video/BV1xx411c7mD")
-
+    monkeypatch.setattr("xfetch.connectors.bilibili.urlopen", lambda request, timeout=10: FakeResponse(payload, "https://api.bilibili.com/x/web-interface/view?bvid=BV1xx411c7mD"))
+    doc = BilibiliConnector().fetch("https://www.bilibili.com/video/BV1xx411c7mD")
     assert doc.source_type == "bilibili"
     assert doc.external_id == "BV1xx411c7mD"
     assert doc.title == "Bilibili Test Video"
@@ -52,6 +27,8 @@ def test_bilibili_connector_extracts_metadata_from_api(monkeypatch):
     assert doc.assets == [{"url": "https://i0.hdslb.com/test-cover.jpg", "type": "image"}]
     assert doc.metadata["view_count"] == 12345
     assert doc.metadata["duration"] == 321
+    assert doc.metadata["has_transcript"] is False
+    assert doc.capture_status == "metadata_only"
 
 
 def test_bilibili_connector_matches_bilibili_urls_only():

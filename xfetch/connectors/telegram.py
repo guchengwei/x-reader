@@ -3,10 +3,11 @@ from __future__ import annotations
 from html import unescape
 import re
 from urllib.parse import urlparse
-from urllib.request import Request, urlopen
+from urllib.request import Request
 
 from xfetch.connectors.base import BaseConnector
 from xfetch.models import NormalizedDocument
+from xfetch.net import safe_urlopen as urlopen
 
 
 _TELEGRAM_URL_RE = re.compile(r"^https?://(?:t\.me|telegram\.me)/", re.IGNORECASE)
@@ -24,9 +25,7 @@ def _fetch_html(url: str) -> tuple[str, str, str]:
 def _extract_meta(html: str, property_name: str) -> str | None:
     pattern = rf'<meta\s+property=["\']{re.escape(property_name)}["\']\s+content=["\']([^"\']*)["\']'
     match = re.search(pattern, html, re.IGNORECASE)
-    if not match:
-        return None
-    return unescape(match.group(1).strip())
+    return unescape(match.group(1).strip()) if match else None
 
 
 def _parse_channel_and_message(url: str) -> tuple[str, str | None]:
@@ -65,14 +64,8 @@ class TelegramConnector(BaseConnector):
             markdown=markdown,
             summary=None,
             assets=assets,
-            metadata={
-                "platform": "telegram",
-                "channel": channel,
-                "message_id": message_id,
-                "content_type": content_type,
-            },
-            lineage={
-                "connector": "telegram",
-                "runtime_version": "0.1.0",
-            },
+            metadata={"platform": "telegram", "channel": channel, "message_id": message_id, "content_type": content_type},
+            lineage={"connector": "telegram", "runtime_version": "0.2.0"},
+            capture_status="partial",
+            content_kinds=["text", "thumbnail"] if image else ["text"],
         )

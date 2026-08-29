@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from html import unescape
 import json
-from urllib.parse import urlparse
-import urllib.request
+import re
+from urllib.parse import urlencode, urlparse
+from urllib.request import Request
+
+from xfetch.net import safe_urlopen
 
 
 def build_fxtwitter_url(tweet_url: str) -> str:
@@ -12,10 +16,39 @@ def build_fxtwitter_url(tweet_url: str) -> str:
 
 
 def fetch_fxtwitter_json(tweet_url: str, timeout: int = 20) -> dict:
-    url = build_fxtwitter_url(tweet_url)
-    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
+    req = Request(build_fxtwitter_url(tweet_url), headers={"User-Agent": "Mozilla/5.0"})
+    with safe_urlopen(req, timeout=timeout) as resp:
         return json.loads(resp.read().decode())
+
+
+def fetch_oembed_json(tweet_url: str, timeout: int = 10) -> dict:
+    endpoint = "https://publish.twitter.com/oembed?" + urlencode({"url": tweet_url, "omit_script": "true"})
+    req = Request(endpoint, headers={"User-Agent": "Mozilla/5.0"})
+    with safe_urlopen(req, timeout=timeout) as resp:
+        return json.loads(resp.read().decode())
+
+
+def parse_oembed_payload(payload: dict, source_url: str) -> dict:
+    fragment = str(payload.get("html") or "")
+    match = re.search(r"<p[^>]*>(.*?)</p>", fragment, re.IGNORECASE | re.DOTALL)
+    fragment = match.group(1) if match else fragment
+    fragment = re.sub(r"<br\s*/?>", "\n", fragment, flags=re.IGNORECASE)
+    text = unescape(re.sub(r"<[^>]+>", "", fragment)).strip()
+    if not text or text.endswith("…") or text.endswith("...") or ("https://t.co/" in text and len(text) < 80):
+        raise ValueError("X oEmbed returned thin or truncated content")
+    status_match = re.search(r"/status/(\d+)", source_url)
+    return {
+        "tweet_id": status_match.group(1) if status_match else "x",
+        "canonical_url": source_url,
+        "screen_name": "",
+        "display_name": str(payload.get("author_name") or ""),
+        "text": text,
+        "markdown": text,
+        "created_at": None,
+        "language": None,
+        "stats": {},
+        "assets": [],
+    }
 
 
 def _normalize_created_at(value: str | None) -> str | None:
@@ -44,9 +77,8 @@ def _normalize_entity_map(entity_map: object) -> dict[str, dict]:
                 continue
             key = entry.get("key")
             value = entry.get("value")
-            if key is None or not isinstance(value, dict):
-                continue
-            normalized[str(key)] = value
+            if key is not None and isinstance(value, dict):
+                normalized[str(key)] = value
         return normalized
     return {}
 
@@ -55,12 +87,7 @@ def _extract_media_url(media_entry: dict | None) -> str:
     if not media_entry:
         return ""
     media_info = media_entry.get("media_info") or {}
-    return (
-        media_info.get("original_img_url")
-        or media_info.get("url")
-        or media_entry.get("url")
-        or ""
-    )
+    return media_info.get("original_img_url") or media_info.get("url") or media_entry.get("url") or ""
 
 
 def _article_media_map(article: dict) -> dict[str, str]:
@@ -98,15 +125,10 @@ def _extract_block_parts(block: dict, entity_map: dict[str, dict], media_map: di
     text_value = str(block.get("text") or "")
     normalized_text = " ".join(text_value.split()).strip()
     entity_ranges = block.get("entityRanges") or []
-
-    text_parts: list[str] = []
-    markdown_parts: list[str] = []
+    text_parts: list[str] = [normalized_text] if normalized_text else []
+    markdown_parts: list[str] = [normalized_text] if normalized_text else []
     assets: list[dict] = []
     asset_urls: set[str] = set()
-
-    if normalized_text:
-        text_parts.append(normalized_text)
-        markdown_parts.append(normalized_text)
 
     for entity_range in entity_ranges:
         if not isinstance(entity_range, dict):
@@ -119,35 +141,26 @@ def _extract_block_parts(block: dict, entity_map: dict[str, dict], media_map: di
                 text_parts.append(markdown)
                 markdown_parts.append(markdown)
         if entity_type == "MEDIA":
-            media_items = ((entity.get("data") or {}).get("mediaItems") or [])
-            for media_item in media_items:
+            for media_item in ((entity.get("data") or {}).get("mediaItems") or []):
                 if not isinstance(media_item, dict):
                     continue
                 media_id = str(media_item.get("mediaId") or media_item.get("media_id") or "").strip()
                 media_url = media_map.get(media_id)
-                if not media_url:
-                    continue
-                markdown_parts.append(f"![]({media_url})")
-                _append_asset_deduped(
-                    assets,
-                    asset_urls,
-                    {"url": media_url, "type": "image", "source": "article_inline", "media_id": media_id},
-                )
-
+                if media_url:
+                    markdown_parts.append(f"![]({media_url})")
+                    _append_asset_deduped(assets, asset_urls, {"url": media_url, "type": "image", "source": "article_inline", "media_id": media_id})
     return "\n\n".join(text_parts), "\n\n".join(markdown_parts), assets
 
 
 def _extract_article_content(article: dict | None) -> tuple[str, str, list[dict]]:
     if not article:
         return "", "", []
-
     text_parts: list[str] = []
     markdown_parts: list[str] = []
     seen_text: set[str] = set()
     seen_markdown: set[str] = set()
     assets: list[dict] = []
     asset_urls: set[str] = set()
-
     title = (article.get("title") or "").strip()
     preview_text = (article.get("preview_text") or "").strip()
     if title:
@@ -170,7 +183,6 @@ def _extract_article_content(article: dict | None) -> tuple[str, str, list[dict]
             _append_deduped(markdown_parts, seen_markdown, block_markdown)
         for asset in block_assets:
             _append_asset_deduped(assets, asset_urls, asset)
-
     return "\n\n".join(text_parts), "\n\n".join(markdown_parts), assets
 
 
@@ -194,11 +206,6 @@ def parse_fxtwitter_payload(payload: dict) -> dict:
         "markdown": markdown,
         "created_at": _normalize_created_at(tweet.get("created_at")),
         "language": tweet.get("lang") or None,
-        "stats": {
-            "likes": tweet.get("likes", 0),
-            "retweets": tweet.get("retweets", 0),
-            "replies": tweet.get("replies", 0),
-            "views": tweet.get("views", 0),
-        },
+        "stats": {"likes": tweet.get("likes", 0), "retweets": tweet.get("retweets", 0), "replies": tweet.get("replies", 0), "views": tweet.get("views", 0)},
         "assets": article_assets,
     }
