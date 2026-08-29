@@ -83,7 +83,7 @@ class BilibiliConnector(BaseConnector):
 
     def fetch(self, url: str) -> NormalizedDocument:
         resolved_url = url
-        if urlparse(url).hostname == "b23.tv" and not _extract_bvid(url):
+        if urlparse(url).hostname in {"b23.tv", "www.b23.tv"} and not _extract_bvid(url):
             resolved_url = _resolve_b23_url(url)
         bvid = _extract_bvid(resolved_url)
         if not bvid:
