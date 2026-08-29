@@ -1,5 +1,7 @@
 import json
 
+import pytest
+
 from xfetch.connectors.bilibili import BilibiliConnector
 
 
@@ -132,6 +134,46 @@ def test_bilibili_connector_records_login_required_subtitles(monkeypatch):
     assert doc.metadata["transcript_available"] is False
     assert doc.metadata["transcript_requires_login"] is True
     assert "transcript_capture_error" not in doc.metadata
+
+
+def test_bilibili_connector_resolves_b23_short_link(monkeypatch):
+    short_url = "https://b23.tv/AbCdEf"
+    resolved_url = "https://www.bilibili.com/video/BV1xx411c7mD?spm_id_from=333.999.0.0"
+    view_payload = {
+        "code": 0,
+        "data": {
+            "title": "Resolved video",
+            "desc": "Resolved description.",
+            "owner": {"name": "UP Author"},
+        },
+    }
+    calls = []
+
+    def fake_urlopen(request, timeout=10):
+        calls.append(request.full_url)
+        if request.full_url == short_url:
+            return FakeResponse("", resolved_url, "text/html")
+        if "/x/web-interface/view" in request.full_url:
+            return FakeResponse(json.dumps(view_payload), request.full_url)
+        raise AssertionError(request.full_url)
+
+    monkeypatch.setattr("xfetch.connectors.bilibili.urlopen", fake_urlopen)
+    doc = BilibiliConnector().fetch(short_url)
+
+    assert doc.source_url == short_url
+    assert doc.external_id == "BV1xx411c7mD"
+    assert doc.canonical_url == "https://www.bilibili.com/video/BV1xx411c7mD"
+    assert calls[0] == short_url
+    assert any("bvid=BV1xx411c7mD" in call for call in calls[1:])
+
+
+def test_bilibili_connector_rejects_path_without_bvid(monkeypatch):
+    def fail_urlopen(request, timeout=10):
+        raise AssertionError("API should not be called")
+
+    monkeypatch.setattr("xfetch.connectors.bilibili.urlopen", fail_urlopen)
+    with pytest.raises(ValueError, match="Cannot extract Bilibili BV ID"):
+        BilibiliConnector().fetch("https://www.bilibili.com/video/not-a-bv")
 
 
 def test_bilibili_connector_matches_bilibili_urls_only():
