@@ -41,7 +41,7 @@ content-out/YYYY-MM/<slug>/
 - `metadata_only` — only metadata/description/thumbnail captured.
 - `failed` — reserved for explicit failed-capture records; normal CLI failures exit non-zero.
 
-`content_kinds` describes captured material such as `text`, `images`, `metadata`, and `thumbnail`.
+`content_kinds` describes captured material such as `text`, `images`, `transcript`, `metadata`, and `thumbnail`.
 
 Asset download failures are not silently ignored: the affected asset records a `capture_error`, `asset_capture_failures` is added to metadata, and a `complete` document is downgraded to `partial`.
 
@@ -55,10 +55,12 @@ Asset download failures are not silently ignored: the affected asset records a `
 | Public Telegram | `partial` OpenGraph post representation |
 | WeChat | article text/images when public HTML is available; verification pages fail explicitly |
 | Xiaohongshu | image notes can be `complete`; video notes are `partial` until video preservation exists; login walls fail explicitly |
-| YouTube | `metadata_only` |
+| YouTube | `partial` when public captions can be captured; otherwise `metadata_only` |
 | Bilibili | `metadata_only` |
 
-YouTube and Bilibili are deliberately not described as full content preservation until transcript/subtitle capture exists.
+YouTube caption capture is best-effort. Some caption tracks are advertised by YouTube but require additional playback tokens; those remain `metadata_only` and record the transcript capture failure instead of failing the whole save. Video bytes are not preserved, so transcript-backed YouTube bundles remain `partial`.
+
+Bilibili is deliberately not described as content preservation until subtitle capture exists.
 
 ## Network safety
 
