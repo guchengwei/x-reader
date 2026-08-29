@@ -12,7 +12,6 @@ from .pipeline.bundle import write_bundle
 from .publishing.git_publish import commit_repo, push_repo
 from .publishing.github_repo_sync import sync_bundle_to_repo
 from .publishing.url import build_pages_url
-from .storage.render import render_bundle_page
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -105,13 +104,11 @@ def _write_publication_receipt(path: Path, public_url: str, content_revision: st
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
-def _render_and_sync(bundle_dir: Path, target_repo: Path, publish_target: PublishTargetConfig):
+def _sync_bundle(bundle_dir: Path, target_repo: Path, publish_target: PublishTargetConfig):
     public_url = build_pages_url(publish_target, slug=bundle_dir.name)
-    rendered_page = render_bundle_page(bundle_dir, Path("site-out"), public_url=public_url)
     result = sync_bundle_to_repo(
         bundle_dir=bundle_dir,
         target_repo=target_repo,
-        rendered_page=rendered_page,
         publish_target=publish_target,
         target_subdir=publish_target.content_subdir,
     )
@@ -121,8 +118,7 @@ def _render_and_sync(bundle_dir: Path, target_repo: Path, publish_target: Publis
 def _publication_paths(target_repo: Path, sync_result) -> tuple[list[str], str]:
     repo = target_repo.resolve()
     bundle_path = sync_result.bundle_destination_dir.resolve().relative_to(repo).as_posix()
-    site_path = sync_result.site_destination_path.parent.resolve().relative_to(repo).as_posix()
-    return [bundle_path, site_path], bundle_path
+    return [bundle_path], bundle_path
 
 
 def _publish_synced_bundle(bundle_dir: Path, target_repo: Path, publish_target: PublishTargetConfig, sync_result, public_url: str) -> tuple[str, str]:
@@ -188,7 +184,7 @@ def run_ingest(args) -> int:
 
 def run_sync(args) -> int:
     publish_target = _build_publish_target(args)
-    result, _public_url = _render_and_sync(Path(args.bundle_dir), Path(args.target_repo), publish_target)
+    result, _public_url = _sync_bundle(Path(args.bundle_dir), Path(args.target_repo), publish_target)
     if args.json:
         print(json.dumps({"ok": True, "destination_dir": str(result.bundle_destination_dir), "target_path": result.target_path, "published": result.published, "public_url": result.public_url, "revision": result.revision}, ensure_ascii=False))
     else:
@@ -202,7 +198,7 @@ def run_publish(args) -> int:
         return 4
     publish_target = _build_publish_target(args)
     bundle_dir = Path(args.bundle_dir)
-    result, public_url = _render_and_sync(bundle_dir, target_repo, publish_target)
+    result, public_url = _sync_bundle(bundle_dir, target_repo, publish_target)
     revision, receipt_revision = _publish_synced_bundle(bundle_dir, target_repo, publish_target, result, public_url)
     if args.json:
         print(json.dumps({"ok": True, "bundle_dir": str(bundle_dir), "public_url": public_url, "revision": revision, "receipt_revision": receipt_revision, "target_repo": str(target_repo)}, ensure_ascii=False))
@@ -242,7 +238,7 @@ def run_save(args) -> int:
     if target_repo and publish_target:
         if not (target_repo / ".git").exists():
             return 4
-        sync_result, public_url = _render_and_sync(bundle_dir, target_repo, publish_target)
+        sync_result, public_url = _sync_bundle(bundle_dir, target_repo, publish_target)
         revision, receipt_revision = _publish_synced_bundle(bundle_dir, target_repo, publish_target, sync_result, public_url)
         result.update(published=True, publish_status="published", public_url=public_url, revision=revision, receipt_revision=receipt_revision)
 
