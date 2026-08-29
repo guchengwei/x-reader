@@ -50,7 +50,8 @@ def _fetch_subtitle_track(bvid: str, cid: int | str) -> tuple[dict | None, bool]
         raise ValueError(f"Bilibili player API error: {payload.get('message')}")
     subtitle = payload.get("data", {}).get("subtitle", {}) or {}
     tracks = subtitle.get("subtitles", []) or []
-    return (tracks[0] if tracks else None), bool(subtitle.get("need_login_subtitle"))
+    track = next((item for item in tracks if item.get("subtitle_url")), None)
+    return track, bool(subtitle.get("need_login_subtitle"))
 
 
 def _fetch_subtitle_text(track: dict) -> str:
