@@ -11,5 +11,6 @@ def test_project_metadata_uses_xfetch_identity():
 
     assert 'name = "xfetch"' in pyproject
     assert 'description = "Chat-first link preservation runtime' in pyproject
+    assert 'xfetch = "xfetch.cli:main"' in pyproject
     assert 'name: xfetch' in skill
     assert '# xfetch' in readme.splitlines()[0:5]
