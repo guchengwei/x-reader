@@ -181,7 +181,7 @@ def test_cli_sync_writes_into_target_repo(tmp_path):
     ])
     assert rc == 0
     assert (target_repo / "content" / "2026-03" / "x-123-alice" / "document.json").exists()
-    assert (target_repo / "site" / "d" / "x-123-alice" / "index.html").exists()
+    assert not (target_repo / "site").exists()
 
 
 
