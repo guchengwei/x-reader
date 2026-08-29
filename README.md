@@ -56,11 +56,11 @@ Asset download failures are not silently ignored: the affected asset records a `
 | WeChat | article text/images when public HTML is available; verification pages fail explicitly |
 | Xiaohongshu | image notes can be `complete`; video notes are `partial` until video preservation exists; login walls fail explicitly |
 | YouTube | `partial` when public captions can be captured; otherwise `metadata_only` |
-| Bilibili | `metadata_only` |
+| Bilibili | `partial` when public subtitles can be captured; otherwise `metadata_only` |
 
 YouTube caption capture is best-effort. Some caption tracks are advertised by YouTube but require additional playback tokens; those remain `metadata_only` and record the transcript capture failure instead of failing the whole save. Video bytes are not preserved, so transcript-backed YouTube bundles remain `partial`.
 
-Bilibili is deliberately not described as content preservation until subtitle capture exists.
+Bilibili subtitle capture uses the public player subtitle list. Videos with public subtitle tracks are captured as `partial`; subtitles that require login remain `metadata_only` with that limitation recorded. Video bytes are not preserved.
 
 ## Network safety
 
