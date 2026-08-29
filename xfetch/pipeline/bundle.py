@@ -6,10 +6,11 @@ import mimetypes
 from pathlib import Path
 import re
 from urllib.parse import urlparse
-import urllib.request
+from urllib.request import Request
 
 from xfetch.config import RuntimeConfig
 from xfetch.models import NormalizedDocument, document_to_dict
+from xfetch.net import safe_urlopen
 
 
 def slugify(text: str) -> str:
@@ -48,13 +49,14 @@ def _infer_extension(url: str, content_type: str | None) -> str:
 
 
 def _download_asset(url: str, timeout: int = 20) -> tuple[bytes, str | None]:
-    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
+    req = Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    with safe_urlopen(req, timeout=timeout, max_bytes=20 * 1024 * 1024) as resp:
         return resp.read(), resp.headers.get("Content-Type")
 
 
 def _materialize_assets(doc: NormalizedDocument, assets_dir: Path) -> None:
     updated_assets: list[dict] = []
+    failures = 0
     for index, asset in enumerate(doc.assets, start=1):
         if not isinstance(asset, dict):
             continue
@@ -64,8 +66,11 @@ def _materialize_assets(doc: NormalizedDocument, assets_dir: Path) -> None:
             continue
         try:
             payload, content_type = _download_asset(url)
-        except Exception:
-            updated_assets.append(asset)
+        except Exception as exc:
+            failed_asset = dict(asset)
+            failed_asset["capture_error"] = str(exc)
+            updated_assets.append(failed_asset)
+            failures += 1
             continue
 
         prefix = "image" if asset.get("type") == "image" else "asset"
@@ -81,10 +86,14 @@ def _materialize_assets(doc: NormalizedDocument, assets_dir: Path) -> None:
             doc.markdown = doc.markdown.replace(url, local_path)
 
     doc.assets = updated_assets
+    if failures:
+        doc.metadata["asset_capture_failures"] = failures
+        if doc.capture_status == "complete":
+            doc.capture_status = "partial"
 
 
 def write_bundle(doc: NormalizedDocument, config: RuntimeConfig) -> Path:
-    month = bundle_month(doc.created_at)
+    month = bundle_month(doc.created_at, doc.lineage.get("fetched_at"))
     slug = build_slug(doc.source_type, doc.external_id, doc.author_handle)
     bundle_dir = config.content_root / month / slug
     assets_dir = bundle_dir / "assets"

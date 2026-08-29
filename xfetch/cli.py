@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
@@ -8,7 +9,7 @@ from pathlib import Path
 from .config import PublishTargetConfig, load_config
 from .connectors.registry import pick_connector as pick_registered_connector
 from .pipeline.bundle import write_bundle
-from .publishing.git_publish import publish_repo
+from .publishing.git_publish import commit_repo, push_repo
 from .publishing.github_repo_sync import sync_bundle_to_repo
 from .publishing.url import build_pages_url
 from .storage.render import render_bundle_page
@@ -63,13 +64,12 @@ def pick_connector(url: str):
 
 def _build_publish_target(args) -> PublishTargetConfig:
     content_subdir = getattr(args, "content_subdir", None) or getattr(args, "target_subdir", "content")
-    site_subdir = getattr(args, "site_subdir", "site")
     return PublishTargetConfig(
         repo_owner=args.repo_owner,
         repo_name=args.repo_name,
         branch=args.branch,
         content_subdir=content_subdir,
-        site_subdir=site_subdir,
+        site_subdir=getattr(args, "site_subdir", "site"),
     )
 
 
@@ -78,6 +78,30 @@ def _load_publish_json(path: Path) -> dict:
 
 
 def _write_publish_json(path: Path, payload: dict) -> None:
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def _set_publish_metadata(path: Path, public_url: str, revision: str, published: bool) -> None:
+    payload = _load_publish_json(path)
+    payload["published"] = published
+    payload["public_url"] = public_url
+    payload["revision"] = revision
+    _write_publish_json(path, payload)
+
+
+def _write_publication_receipt(path: Path, public_url: str, content_revision: str, target: PublishTargetConfig) -> None:
+    payload = {
+        "published": True,
+        "published_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "public_url": public_url,
+        "content_revision": content_revision,
+        "target": {
+            "type": "github_pages",
+            "repo_owner": target.repo_owner,
+            "repo_name": target.repo_name,
+            "branch": target.branch,
+        },
+    }
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
@@ -94,14 +118,36 @@ def _render_and_sync(bundle_dir: Path, target_repo: Path, publish_target: Publis
     return result, public_url
 
 
-def _mark_publish_metadata(bundle_dir: Path, target_bundle_dir: Path, public_url: str, revision: str | None, published: bool) -> None:
-    for publish_path in (bundle_dir / "publish.json", target_bundle_dir / "publish.json"):
-        payload = _load_publish_json(publish_path)
-        payload["published"] = published
-        payload["public_url"] = public_url
-        if revision is not None:
-            payload["revision"] = revision
-        _write_publish_json(publish_path, payload)
+def _publication_paths(target_repo: Path, sync_result) -> tuple[list[str], str]:
+    repo = target_repo.resolve()
+    bundle_path = sync_result.bundle_destination_dir.resolve().relative_to(repo).as_posix()
+    site_path = sync_result.site_destination_path.parent.resolve().relative_to(repo).as_posix()
+    return [bundle_path, site_path], bundle_path
+
+
+def _publish_synced_bundle(bundle_dir: Path, target_repo: Path, publish_target: PublishTargetConfig, sync_result, public_url: str) -> tuple[str, str]:
+    content_paths, bundle_path = _publication_paths(target_repo, sync_result)
+    content_revision = commit_repo(
+        target_repo,
+        branch=publish_target.branch,
+        commit_message=f"publish: {bundle_dir.name}",
+        paths=content_paths,
+    )
+
+    target_publish = sync_result.bundle_destination_dir / "publish.json"
+    _set_publish_metadata(target_publish, public_url, content_revision, published=True)
+    _write_publication_receipt(sync_result.bundle_destination_dir / "publication.json", public_url, content_revision, publish_target)
+    receipt_revision = commit_repo(
+        target_repo,
+        branch=publish_target.branch,
+        commit_message=f"receipt: {bundle_dir.name}",
+        paths=[bundle_path],
+    )
+    push_repo(target_repo, branch=publish_target.branch)
+
+    _set_publish_metadata(bundle_dir / "publish.json", public_url, content_revision, published=True)
+    _write_publication_receipt(bundle_dir / "publication.json", public_url, content_revision, publish_target)
+    return content_revision, receipt_revision
 
 
 def _resolve_optional_publish_target(args) -> tuple[Path | None, PublishTargetConfig | None]:
@@ -131,21 +177,10 @@ def run_ingest(args) -> int:
     connector = pick_connector(args.url)
     if connector is None:
         return 2
-
     doc = connector.fetch(args.url)
     bundle_dir = write_bundle(doc, config)
     if args.json:
-        print(
-            json.dumps(
-                {
-                    "ok": True,
-                    "source_type": doc.source_type,
-                    "external_id": doc.external_id,
-                    "bundle_dir": str(bundle_dir),
-                },
-                ensure_ascii=False,
-            )
-        )
+        print(json.dumps({"ok": True, "source_type": doc.source_type, "external_id": doc.external_id, "bundle_dir": str(bundle_dir), "capture_status": doc.capture_status}, ensure_ascii=False))
     else:
         print(bundle_dir)
     return 0
@@ -155,19 +190,7 @@ def run_sync(args) -> int:
     publish_target = _build_publish_target(args)
     result, _public_url = _render_and_sync(Path(args.bundle_dir), Path(args.target_repo), publish_target)
     if args.json:
-        print(
-            json.dumps(
-                {
-                    "ok": True,
-                    "destination_dir": str(result.bundle_destination_dir),
-                    "target_path": result.target_path,
-                    "published": result.published,
-                    "public_url": result.public_url,
-                    "revision": result.revision,
-                },
-                ensure_ascii=False,
-            )
-        )
+        print(json.dumps({"ok": True, "destination_dir": str(result.bundle_destination_dir), "target_path": result.target_path, "published": result.published, "public_url": result.public_url, "revision": result.revision}, ensure_ascii=False))
     else:
         print(result.bundle_destination_dir)
     return 0
@@ -177,29 +200,12 @@ def run_publish(args) -> int:
     target_repo = Path(args.target_repo)
     if not (target_repo / ".git").exists():
         return 4
-
     publish_target = _build_publish_target(args)
     bundle_dir = Path(args.bundle_dir)
     result, public_url = _render_and_sync(bundle_dir, target_repo, publish_target)
-    _mark_publish_metadata(bundle_dir, result.bundle_destination_dir, public_url, revision=None, published=True)
-    revision = publish_repo(target_repo=target_repo, branch=publish_target.branch, commit_message=f"publish: {bundle_dir.name}")
-    source_publish = _load_publish_json(bundle_dir / "publish.json")
-    source_publish["revision"] = revision
-    _write_publish_json(bundle_dir / "publish.json", source_publish)
-
+    revision, receipt_revision = _publish_synced_bundle(bundle_dir, target_repo, publish_target, result, public_url)
     if args.json:
-        print(
-            json.dumps(
-                {
-                    "ok": True,
-                    "bundle_dir": str(bundle_dir),
-                    "public_url": public_url,
-                    "revision": revision,
-                    "target_repo": str(target_repo),
-                },
-                ensure_ascii=False,
-            )
-        )
+        print(json.dumps({"ok": True, "bundle_dir": str(bundle_dir), "public_url": public_url, "revision": revision, "receipt_revision": receipt_revision, "target_repo": str(target_repo)}, ensure_ascii=False))
     else:
         print(public_url)
     return 0
@@ -210,7 +216,6 @@ def run_save(args) -> int:
     connector = pick_connector(args.url)
     if connector is None:
         return 2
-
     doc = connector.fetch(args.url)
     bundle_dir = write_bundle(doc, config)
     result = {
@@ -218,11 +223,14 @@ def run_save(args) -> int:
         "url": doc.canonical_url or doc.source_url,
         "title": doc.title,
         "source_type": doc.source_type,
+        "capture_status": doc.capture_status,
+        "content_kinds": doc.content_kinds,
         "bundle_dir": str(bundle_dir),
         "published": False,
         "publish_status": "not_configured",
         "public_url": None,
         "revision": None,
+        "receipt_revision": None,
     }
 
     try:
@@ -235,25 +243,13 @@ def run_save(args) -> int:
         if not (target_repo / ".git").exists():
             return 4
         sync_result, public_url = _render_and_sync(bundle_dir, target_repo, publish_target)
-        _mark_publish_metadata(bundle_dir, sync_result.bundle_destination_dir, public_url, revision=None, published=True)
-        revision = publish_repo(target_repo=target_repo, branch=publish_target.branch, commit_message=f"publish: {bundle_dir.name}")
-        source_publish = _load_publish_json(bundle_dir / "publish.json")
-        source_publish["revision"] = revision
-        _write_publish_json(bundle_dir / "publish.json", source_publish)
-        result.update(
-            published=True,
-            publish_status="published",
-            public_url=public_url,
-            revision=revision,
-        )
+        revision, receipt_revision = _publish_synced_bundle(bundle_dir, target_repo, publish_target, sync_result, public_url)
+        result.update(published=True, publish_status="published", public_url=public_url, revision=revision, receipt_revision=receipt_revision)
 
     if args.json:
         print(json.dumps(result, ensure_ascii=False))
     else:
-        if result["published"]:
-            print(result["public_url"])
-        else:
-            print(result["bundle_dir"])
+        print(result["public_url"] if result["published"] else result["bundle_dir"])
     return 0
 
 

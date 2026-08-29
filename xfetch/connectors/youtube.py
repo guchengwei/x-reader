@@ -3,10 +3,11 @@ from __future__ import annotations
 from html import unescape
 import re
 from urllib.parse import parse_qs, urlparse
-from urllib.request import Request, urlopen
+from urllib.request import Request
 
 from xfetch.connectors.base import BaseConnector
 from xfetch.models import NormalizedDocument
+from xfetch.net import safe_urlopen as urlopen
 
 
 _YOUTUBE_HOST_RE = re.compile(r"(?:^|\.)(?:youtube\.com|youtu\.be)$", re.IGNORECASE)
@@ -27,9 +28,7 @@ def _extract_video_id(url: str) -> str | None:
     if qs.get("v"):
         return qs["v"][0]
     match = re.search(r"/embed/([^/?#]+)", parsed.path)
-    if match:
-        return match.group(1)
-    return None
+    return match.group(1) if match else None
 
 
 def _fetch_html(url: str) -> tuple[str, str, str]:
@@ -44,9 +43,7 @@ def _fetch_html(url: str) -> tuple[str, str, str]:
 def _extract_meta(html: str, attr_name: str, attr_value: str) -> str | None:
     pattern = rf'<meta\s+(?:name|property)=["\']{re.escape(attr_value)}["\']\s+content=["\']([^"\']*)["\']'
     match = re.search(pattern, html, re.IGNORECASE)
-    if not match:
-        return None
-    return unescape(match.group(1).strip())
+    return unescape(match.group(1).strip()) if match else None
 
 
 class YouTubeConnector(BaseConnector):
@@ -79,13 +76,8 @@ class YouTubeConnector(BaseConnector):
             markdown=markdown,
             summary=None,
             assets=assets,
-            metadata={
-                "platform": "youtube",
-                "content_type": content_type,
-                "has_transcript": False,
-            },
-            lineage={
-                "connector": "youtube",
-                "runtime_version": "0.1.0",
-            },
+            metadata={"platform": "youtube", "content_type": content_type, "has_transcript": False},
+            lineage={"connector": "youtube", "runtime_version": "0.2.0"},
+            capture_status="metadata_only",
+            content_kinds=["metadata", "thumbnail"] if image else ["metadata"],
         )

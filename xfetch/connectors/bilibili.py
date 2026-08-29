@@ -3,10 +3,11 @@ from __future__ import annotations
 import json
 import re
 from urllib.parse import urlencode, urlparse
-from urllib.request import Request, urlopen
+from urllib.request import Request
 
 from xfetch.connectors.base import BaseConnector
 from xfetch.models import NormalizedDocument
+from xfetch.net import safe_urlopen as urlopen
 
 
 _BILIBILI_URL_RE = re.compile(r"^https?://(?:www\.)?(?:bilibili\.com|b23\.tv)/", re.IGNORECASE)
@@ -21,9 +22,7 @@ def _slugify(text: str) -> str:
 
 def _extract_bvid(url: str) -> str | None:
     match = _BV_RE.search(url)
-    if match:
-        return match.group(1)
-    return None
+    return match.group(1) if match else None
 
 
 def _fetch_api_payload(bvid: str) -> tuple[dict, str]:
@@ -73,14 +72,8 @@ class BilibiliConnector(BaseConnector):
             markdown=markdown,
             summary=None,
             assets=assets,
-            metadata={
-                "platform": "bilibili",
-                "content_type": content_type,
-                "duration": data.get("duration", 0),
-                "view_count": data.get("stat", {}).get("view", 0),
-            },
-            lineage={
-                "connector": "bilibili",
-                "runtime_version": "0.1.0",
-            },
+            metadata={"platform": "bilibili", "content_type": content_type, "duration": data.get("duration", 0), "view_count": data.get("stat", {}).get("view", 0), "has_transcript": False},
+            lineage={"connector": "bilibili", "runtime_version": "0.2.0"},
+            capture_status="metadata_only",
+            content_kinds=["metadata", "thumbnail"] if cover else ["metadata"],
         )

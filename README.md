@@ -2,88 +2,28 @@
 
 Chat-first link preservation runtime.
 
-xfetch ingests a supported URL, normalizes it into a portable content bundle, and can sync/publish that bundle into a separate content repo for durable public hosting.
+xfetch turns supported public URLs into portable content bundles and can publish those bundles into a separate content repository for durable static hosting. It is intentionally narrower than its upstream lineage: xfetch is a capture/preservation engine, not a universal reader, inbox, MCP product, search tool, or analysis suite.
 
-Current supported source families:
-- X
-- generic web pages
-- RSS/Atom feeds
-- public Telegram posts/channels
-- WeChat articles
-- Xiaohongshu notes
-- YouTube videos
-- Bilibili videos
-
-Why xfetch exists:
-- preserve content, not just bookmark links
-- keep runtime code separate from published content artifacts
-- work cleanly behind Hermes or other agent/chat front doors
-- produce portable bundles that can be moved, synced, and published anywhere
-
-Project note:
-- this project previously lived under legacy names like x-reader / x-tweet-fetcher
-- the intended identity now is xfetch
-
-## What xfetch does
-
-For each supported URL, xfetch can:
-1. detect the right connector
-2. fetch and normalize the source into a common document shape
-3. write a local bundle directory
-4. render a static HTML page for publication
-5. sync/publish that bundle into a separate target repo
-6. return a durable GitHub Pages URL
-
-In practice, xfetch is the runtime layer in a larger flow:
-- Hermes or another caller receives a natural-language save request
-- xfetch ingests the URL and writes a normalized bundle
-- xfetch syncs/publishes the bundle into a clean content repo
-- GitHub Pages serves the rendered artifact
-
-## Repo roles
-
-xfetch intentionally separates runtime from content storage.
-
-- xfetch repo
-  - ingestion runtime
-  - connectors
-  - bundle writer
-  - rendering logic
-  - sync/publish commands
-
-- link-vault repo
-  - clean published artifact store
-  - GitHub Pages surface
-  - public item pages and homepage index
-
-That split keeps code history and content history independent, and makes it easier to run ingestion in one environment while publishing in another.
-
-## End-to-end architecture
+## Goal
 
 ```text
-Hermes request
-  -> xfetch ingest
-  -> normalized bundle written locally
-  -> xfetch sync/publish into target repo
-  -> target repo push
-  -> GitHub Pages serves rendered page
+caller / Hermes
+      ↓
+    xfetch
+fetch → normalize → bundle
+                    ↓
+               publisher
+                    ↓
+           content repository
+                    ↓
+              static hosting
 ```
 
-Current operational path on this machine:
+The runtime repository owns fetching, normalization, bundle creation, rendering, and publication mechanics. The target repository owns the durable published artifacts and any higher-level index/search experience.
 
-```text
-Hermes
-  -> xfetch
-  -> /Users/zion/link-vault-publish
-  -> guchengwei/link-vault
-  -> https://guchengwei.github.io/link-vault/
-```
+## Capture contract
 
-## Bundle contract
-
-Each saved item is written as a portable bundle directory.
-
-Typical structure:
+Every item is normalized into `NormalizedDocument` and written as:
 
 ```text
 content-out/YYYY-MM/<slug>/
@@ -91,20 +31,40 @@ content-out/YYYY-MM/<slug>/
   index.md
   publish.json
   assets/
+  publication.json   # added after a successful publish
 ```
 
-Bundle files:
-- document.json
-  - normalized structured record
-  - source metadata, title, author, timestamps, content fields, lineage
-- index.md
-  - markdown rendering of the captured content
-- publish.json
-  - publish state, target metadata, public URL, revision
-- assets/
-  - downloaded inline media when present
+`document.json` includes explicit capture quality:
 
-When published, xfetch also renders a static HTML page into the target repo's site tree so GitHub Pages can serve it directly.
+- `complete` — meaningful source content captured to the connector's supported contract.
+- `partial` — useful content captured, but completeness is not guaranteed.
+- `metadata_only` — only metadata/description/thumbnail captured.
+- `failed` — reserved for explicit failed-capture records; normal CLI failures exit non-zero.
+
+`content_kinds` describes captured material such as `text`, `images`, `metadata`, and `thumbnail`.
+
+Asset download failures are not silently ignored: the affected asset records a `capture_error`, `asset_capture_failures` is added to metadata, and a `complete` document is downgraded to `partial`.
+
+## Supported source families
+
+| Source | Current capture level |
+|---|---|
+| X status | `complete` through FxTwitter when available; validated oEmbed fallback is `partial` |
+| Generic web | `partial` main/article-oriented text extraction |
+| RSS / Atom | `complete` when a full content element is present, otherwise `partial` |
+| Public Telegram | `partial` OpenGraph post representation |
+| WeChat | article text/images when public HTML is available; verification pages fail explicitly |
+| Xiaohongshu | note text/images when public initial state is available; login walls fail explicitly |
+| YouTube | `metadata_only` |
+| Bilibili | `metadata_only` |
+
+YouTube and Bilibili are deliberately not described as full content preservation until transcript/subtitle capture exists.
+
+## Network safety
+
+xfetch accepts public HTTP(S) sources only. Before a request, after a redirect, and before downloading an asset, it resolves the destination and rejects non-public addresses (loopback, private, link-local, reserved, metadata endpoints, and similar ranges). Responses are size-limited to reduce accidental unbounded downloads.
+
+This is a security boundary because xfetch is intended to sit behind an agent/chat front door.
 
 ## CLI
 
@@ -115,191 +75,95 @@ pip install -e .[dev]
 python -m xfetch --help
 ```
 
-Primary commands:
-- save
-- ingest
-- sync
-- publish
+### Save
 
-### 1) Save
-
-`save` is the canonical one-shot command for Hermes and other callers. It writes the local bundle and, when publish configuration is available, also publishes it.
-
-Minimal local save:
+`save` is the canonical one-shot command:
 
 ```bash
-python -m xfetch save "https://x.com/jack/status/20"
 python -m xfetch save "https://x.com/jack/status/20" --json
 ```
 
-Explicit publish target:
-
-```bash
-python -m xfetch save "https://x.com/jack/status/20" \
-  --content-root /Users/zion/xfetch/content-out \
-  --target-repo /Users/zion/link-vault-publish \
-  --repo-owner guchengwei \
-  --repo-name link-vault \
-  --json
-```
-
-Env-driven publish defaults:
+With publication defaults:
 
 ```bash
 export XFETCH_TARGET_REPO='/Users/zion/link-vault-publish'
 export XFETCH_REPO_OWNER='guchengwei'
 export XFETCH_REPO_NAME='link-vault'
 
-python -m xfetch save "https://x.com/jack/status/20" \
-  --content-root /Users/zion/xfetch/content-out \
+python -m xfetch save "https://example.com/article" \
+  --content-root ./content-out \
   --json
 ```
 
-Optional env overrides:
+Optional environment overrides:
+
 - `XFETCH_BRANCH`
 - `XFETCH_CONTENT_SUBDIR`
 - `XFETCH_SITE_SUBDIR`
+- `XFETCH_CONTENT_ROOT`
 
-JSON output includes:
-- `ok`
-- `url`
-- `title`
-- `source_type`
-- `bundle_dir`
-- `published`
-- `publish_status`
-- `public_url`
-- `revision`
+JSON output includes capture quality plus publication state:
 
-### 2) Ingest
-
-Ingest writes a local normalized bundle.
-
-```bash
-python -m xfetch ingest "https://x.com/jack/status/20"
-python -m xfetch ingest "https://example.com/posts/123"
-python -m xfetch ingest "https://example.com/feed.xml"
-python -m xfetch ingest "https://t.me/ai_daily/123"
-python -m xfetch ingest "https://mp.weixin.qq.com/s/example"
-python -m xfetch ingest "https://www.xiaohongshu.com/explore/67b8e3f5000000000b00d8e2"
-python -m xfetch ingest "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
-python -m xfetch ingest "https://www.bilibili.com/video/BV1xx411c7mD"
+```json
+{
+  "ok": true,
+  "source_type": "web",
+  "capture_status": "partial",
+  "content_kinds": ["text", "metadata"],
+  "bundle_dir": "...",
+  "published": true,
+  "public_url": "...",
+  "revision": "<content commit>",
+  "receipt_revision": "<receipt commit>"
+}
 ```
 
-Optional JSON output:
+### Ingest
 
 ```bash
-python -m xfetch ingest "https://x.com/jack/status/20" --json
+python -m xfetch ingest "https://example.com/article" --json
 ```
 
-If needed, you can override where bundles are written:
+Writes a local bundle without publishing it.
+
+### Sync
 
 ```bash
-python -m xfetch ingest "https://x.com/jack/status/20" --content-root ./content-out
+python -m xfetch sync ./content-out/2026-08/web-example \
+  --target-repo /path/to/target \
+  --repo-owner owner \
+  --repo-name repo
 ```
 
-### 3) Sync
+Copies the bundle and rendered page into a target working tree without committing.
 
-Sync copies a bundle and its rendered site output into a target repo working tree, but does not commit or push.
+### Publish
 
 ```bash
-python -m xfetch sync ./content-out/2006-03/x-20-jack \
-  --target-repo /Users/zion/link-vault-publish \
-  --repo-owner guchengwei \
-  --repo-name link-vault
+python -m xfetch publish ./content-out/2026-08/web-example \
+  --target-repo /path/to/target \
+  --repo-owner owner \
+  --repo-name repo
 ```
 
-### 4) Publish
+Publication stages only the generated bundle/site paths. Unrelated dirty files are left untouched, and unrelated pre-staged changes cause publication to fail instead of being swept into a content commit.
 
-Publish performs the sync, updates publish metadata, commits the target repo, and pushes it.
+The publisher creates a content commit, records that immutable content revision in `publish.json`/`publication.json`, creates a receipt commit locally, then pushes both commits in one push. This avoids the self-referential problem of trying to place a commit's own SHA inside itself.
 
-```bash
-python -m xfetch publish ./content-out/2006-03/x-20-jack \
-  --target-repo /Users/zion/link-vault-publish \
-  --repo-owner guchengwei \
-  --repo-name link-vault
-```
+If the remote target branch has commits not contained in the local target working tree, publication fails and requires the target checkout to be updated first.
 
-Publish assumptions:
-- the target repo already exists locally
-- the target repo already has git remote/auth configured
-- GitHub Pages deployment happens downstream in GitHub Actions after push
-- xfetch renders static site output locally; the Pages workflow serves that output rather than re-running ingestion remotely
+## Rendering
 
-## Output and publication model
+xfetch keeps a small dependency-free static renderer for prepared Pages output. It handles headings, paragraphs, fenced code, images, ordered/unordered lists, blockquotes, links, inline code, and bold text. The normalized bundle remains the durable source of truth; consumers are free to render it differently.
 
-xfetch is designed around portable local-first artifacts.
+## Upstream relationship
 
-What gets produced locally:
-- a normalized bundle under content-out/
-- a rendered static page for that bundle
-- publish metadata recording the intended target and resulting public URL
-
-What gets stored in the target content repo:
-- copied bundle under content/
-- rendered page under site/
-- any copied assets needed for public serving
-
-What becomes public:
-- per-item GitHub Pages URL, typically:
-  - https://guchengwei.github.io/link-vault/d/<slug>/
-- homepage index in the publish repo, currently:
-  - https://guchengwei.github.io/link-vault/
-
-## Supported connector families
-
-xfetch currently includes connectors for:
-- x
-- rss
-- telegram
-- wechat
-- xiaohongshu
-- youtube
-- bilibili
-- web
-
-These all normalize into the same bundle contract, which lets downstream rendering and publication stay source-agnostic.
-
-## Design principles
-
-- chat-first
-  - works well when invoked by Hermes or another agent
-- portable bundles
-  - saved items should remain useful outside the runtime that created them
-- runtime/content separation
-  - code repo and content repo should not be tightly coupled
-- local rendering, remote serving
-  - rendering happens locally; GitHub Pages serves prepared artifacts
-- incremental source expansion
-  - new connectors should plug into the same normalized document + bundle pipeline
+This repository is a fork of `runesleo/x-reader`, but upstream product direction is not xfetch's specification. Upstream is useful as a source of hard-earned fetcher fixes and fallback behavior. Changes should be ported selectively when they improve xfetch's preservation contract; upstream inbox, MCP, skills, search, and general reader surfaces are intentionally out of scope.
 
 ## Development
-
-Run targeted tests:
-
-```bash
-pytest tests/test_cli.py tests/test_publishing.py tests/test_render.py -q
-```
-
-Run the whole suite:
 
 ```bash
 pytest -q
 ```
 
-## Status
-
-xfetch is the active save/publish runtime.
-
-Legacy lineage from x-reader/x-tweet-fetcher still shows up in some history and packaging details, but the active direction is:
-- xfetch as the runtime
-- link-vault as the published artifact repo
-- Hermes as the preferred chat interface
-
-## Example mental model
-
-A useful shorthand is:
-- Karakeep manages a bookmark library
-- xfetch preserves and publishes an individual item well
-
-So xfetch is not trying to be a full bookmark-management product. It is the lean ingestion, normalization, and publication layer behind a preservation workflow.
+Pull requests run the test suite on Python 3.10, 3.11, and 3.12.

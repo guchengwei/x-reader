@@ -5,12 +5,13 @@ from hashlib import sha1
 from html import unescape
 from html.parser import HTMLParser
 import re
-from urllib.parse import urlparse
-from urllib.request import Request, urlopen
+from urllib.parse import urljoin, urlparse
+from urllib.request import Request
 
 from xfetch.connectors.base import BaseConnector
-from xfetch.models import NormalizedDocument
 from xfetch.connectors.x import is_x_url
+from xfetch.models import NormalizedDocument
+from xfetch.net import safe_urlopen as urlopen
 
 
 def _is_feed_url(url: str) -> bool:
@@ -23,20 +24,32 @@ class _HTMLDocumentParser(HTMLParser):
         super().__init__()
         self.title = ""
         self.author = None
+        self.canonical_url = None
         self._in_title = False
         self._skip_depth = 0
+        self._main_depth = 0
         self._chunks: list[str] = []
+        self._main_chunks: list[str] = []
 
     def handle_starttag(self, tag, attrs):
+        lowered = tag.lower()
         attrs_dict = {key.lower(): value for key, value in attrs}
-        if tag.lower() == "title":
+        if lowered == "title":
             self._in_title = True
-        if tag.lower() in {"script", "style", "noscript"}:
+        if lowered in {"script", "style", "noscript"}:
             self._skip_depth += 1
-        if tag.lower() == "meta":
+        if lowered in {"article", "main"}:
+            self._main_depth += 1
+        if lowered == "meta":
             name = (attrs_dict.get("name") or attrs_dict.get("property") or "").lower()
             if name in {"author", "article:author"} and attrs_dict.get("content"):
                 self.author = attrs_dict["content"].strip()
+        if lowered == "link":
+            rel = (attrs_dict.get("rel") or "").lower()
+            if "canonical" in rel and attrs_dict.get("href"):
+                self.canonical_url = attrs_dict["href"].strip()
+        if lowered in {"p", "div", "section", "article", "main", "br", "li", "h1", "h2", "h3", "h4"}:
+            self._append("\n")
 
     def handle_endtag(self, tag):
         lowered = tag.lower()
@@ -44,8 +57,10 @@ class _HTMLDocumentParser(HTMLParser):
             self._in_title = False
         if lowered in {"script", "style", "noscript"} and self._skip_depth:
             self._skip_depth -= 1
-        if lowered in {"p", "div", "section", "article", "main", "br", "li", "h1", "h2", "h3", "h4"}:
-            self._chunks.append("\n")
+        if lowered in {"p", "div", "section", "article", "main", "li", "h1", "h2", "h3", "h4"}:
+            self._append("\n")
+        if lowered in {"article", "main"} and self._main_depth:
+            self._main_depth -= 1
 
     def handle_data(self, data):
         text = unescape(data)
@@ -55,18 +70,28 @@ class _HTMLDocumentParser(HTMLParser):
             return
         collapsed = " ".join(text.split())
         if collapsed:
-            self._chunks.append(collapsed)
+            self._append(collapsed)
 
-    def text_content(self) -> str:
-        text = " ".join(self._chunks)
+    def _append(self, value: str) -> None:
+        self._chunks.append(value)
+        if self._main_depth:
+            self._main_chunks.append(value)
+
+    @staticmethod
+    def _clean(chunks: list[str]) -> str:
+        text = " ".join(chunks)
         text = re.sub(r"\s*\n\s*", "\n", text)
         text = re.sub(r"\n{2,}", "\n\n", text)
         text = re.sub(r"[ \t]{2,}", " ", text)
         return text.strip()
 
+    def text_content(self) -> str:
+        main = self._clean(self._main_chunks)
+        return main or self._clean(self._chunks)
+
 
 def _fetch_url(url: str) -> tuple[str, str, str]:
-    request = Request(url, headers={"User-Agent": "xfetch/0.1.0"})
+    request = Request(url, headers={"User-Agent": "xfetch/0.2.0"})
     with urlopen(request, timeout=10) as response:
         body = response.read().decode("utf-8", errors="replace")
         final_url = response.geturl()
@@ -87,11 +112,12 @@ class WebConnector(BaseConnector):
         return True
 
     def fetch(self, url: str) -> NormalizedDocument:
-        html, canonical_url, content_type = _fetch_url(url)
+        html, fetched_url, content_type = _fetch_url(url)
         parser = _HTMLDocumentParser()
         parser.feed(html)
         parser.close()
 
+        canonical_url = urljoin(fetched_url, parser.canonical_url) if parser.canonical_url else fetched_url
         title = " ".join(parser.title.split()) or urlparse(canonical_url).path.strip("/") or canonical_url
         author_handle = _domain_handle(canonical_url)
         author = parser.author or author_handle
@@ -113,13 +139,8 @@ class WebConnector(BaseConnector):
             text=text,
             markdown=markdown,
             summary=None,
-            metadata={
-                "platform": "web",
-                "content_type": content_type,
-            },
-            lineage={
-                "fetched_at": fetched_at,
-                "connector": "web",
-                "runtime_version": "0.1.0",
-            },
+            metadata={"platform": "web", "content_type": content_type},
+            lineage={"fetched_at": fetched_at, "connector": "web", "runtime_version": "0.2.0"},
+            capture_status="partial",
+            content_kinds=["text", "metadata"],
         )

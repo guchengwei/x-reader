@@ -4,10 +4,11 @@ from datetime import datetime, timezone
 from html import unescape
 from html.parser import HTMLParser
 import re
-from urllib.request import Request, urlopen
+from urllib.request import Request
 
 from xfetch.connectors.base import BaseConnector
 from xfetch.models import NormalizedDocument
+from xfetch.net import safe_urlopen as urlopen
 
 
 _WECHAT_URL_RE = re.compile(r"^https?://mp\.weixin\.qq\.com/", re.IGNORECASE)
@@ -93,12 +94,29 @@ def _normalize_timestamp(raw_timestamp: str | None) -> str | None:
     return datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _looks_blocked(html: str) -> bool:
+    sentinels = (
+        "Weixin Official Accounts Platform",
+        "环境异常",
+        "去验证",
+        "访问过于频繁",
+    )
+    return any(value in html for value in sentinels)
+
+
 class WeChatConnector(BaseConnector):
     def can_handle(self, url: str) -> bool:
         return bool(_WECHAT_URL_RE.match(url))
 
     def fetch(self, url: str) -> NormalizedDocument:
         html, canonical_url, content_type = _fetch_html(url)
+        parser = _WeChatContentParser()
+        parser.feed(html)
+        parser.close()
+        text = parser.text_content()
+        if not text and _looks_blocked(html):
+            raise ValueError("WeChat returned an anti-scraping verification page")
+
         title = _extract_first(r'<meta\s+property=["\']og:title["\']\s+content=["\']([^"\']*)["\']', html)
         if not title:
             title = _extract_first(r'<h1[^>]*class=["\'][^"\']*rich_media_title[^"\']*["\'][^>]*>(.*?)</h1>', html)
@@ -106,10 +124,8 @@ class WeChatConnector(BaseConnector):
         account = _extract_first(r'var\s+nickname\s*=\s*["\']([^"\']+)["\']', html)
         if not account:
             account = _extract_first(r'<a[^>]*id=["\']js_name["\'][^>]*>(.*?)</a>', html)
-        parser = _WeChatContentParser()
-        parser.feed(html)
-        parser.close()
-        text = parser.text_content() or title or canonical_url
+        if not text:
+            text = title or canonical_url
         assets = _extract_images(html)
         created_at = _normalize_timestamp(_extract_first(r'var\s+ct\s*=\s*["\']?(\d+)["\']?', html))
         title = title or text.splitlines()[0][:80]
@@ -131,13 +147,8 @@ class WeChatConnector(BaseConnector):
             markdown=markdown,
             summary=None,
             assets=assets,
-            metadata={
-                "platform": "wechat",
-                "account": account,
-                "content_type": content_type,
-            },
-            lineage={
-                "connector": "wechat",
-                "runtime_version": "0.1.0",
-            },
+            metadata={"platform": "wechat", "account": account, "content_type": content_type},
+            lineage={"connector": "wechat", "runtime_version": "0.2.0"},
+            capture_status="complete" if parser.text_content() else "partial",
+            content_kinds=["text", "images"] if assets else ["text"],
         )
