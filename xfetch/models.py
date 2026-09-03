@@ -19,6 +19,7 @@ class NormalizedDocument:
     text: str
     markdown: str
     summary: str | None
+    card: dict[str, Any] | None = None
     tags: list[str] = field(default_factory=list)
     assets: list[dict[str, Any]] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)

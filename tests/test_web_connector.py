@@ -55,6 +55,52 @@ def test_web_connector_extracts_basic_document_fields(monkeypatch):
     assert doc.lineage["connector"] == "web"
 
 
+def test_web_connector_preserves_open_graph_and_article_image_candidates(monkeypatch):
+    html = """
+    <html>
+      <head>
+        <title>Fallback Browser Title</title>
+        <meta property="og:title" content="Specific Canonical Article Title">
+        <meta property="og:description" content="A factual description of the captured article.">
+        <meta property="og:image" content="/images/cover.jpg">
+        <meta property="og:image:width" content="1200">
+        <meta property="og:image:height" content="675">
+      </head>
+      <body><main>
+        <p>Article content.</p>
+        <img src="/images/diagram.png" width="900" height="600" alt="System diagram">
+      </main></body>
+    </html>
+    """
+    monkeypatch.setattr(
+        "xfetch.connectors.web.urlopen",
+        lambda request, timeout=10: FakeResponse(html, "https://example.com/posts/123"),
+    )
+
+    doc = WebConnector().fetch("https://example.com/posts/123")
+
+    assert doc.title == "Specific Canonical Article Title"
+    assert doc.summary == "A factual description of the captured article."
+    assert doc.assets == [
+        {
+            "url": "https://example.com/images/cover.jpg",
+            "type": "image",
+            "source": "open_graph",
+            "width": "1200",
+            "height": "675",
+        },
+        {
+            "url": "https://example.com/images/diagram.png",
+            "type": "image",
+            "source": "article_image",
+            "alt": "System diagram",
+            "width": "900",
+            "height": "600",
+        },
+    ]
+    assert doc.content_kinds == ["text", "metadata", "images"]
+
+
 def test_web_connector_matches_generic_http_urls_but_not_x_or_rss():
     connector = WebConnector()
     assert connector.can_handle("https://example.com/posts/123") is True

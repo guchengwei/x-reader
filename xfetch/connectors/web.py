@@ -25,6 +25,12 @@ class _HTMLDocumentParser(HTMLParser):
         self.title = ""
         self.author = None
         self.canonical_url = None
+        self.description = None
+        self.open_graph_title = None
+        self.open_graph_image = None
+        self.open_graph_image_width = None
+        self.open_graph_image_height = None
+        self.images: list[dict] = []
         self._in_title = False
         self._skip_depth = 0
         self._main_depth = 0
@@ -44,10 +50,33 @@ class _HTMLDocumentParser(HTMLParser):
             name = (attrs_dict.get("name") or attrs_dict.get("property") or "").lower()
             if name in {"author", "article:author"} and attrs_dict.get("content"):
                 self.author = attrs_dict["content"].strip()
+            if name in {"description", "og:description", "twitter:description"} and attrs_dict.get("content"):
+                self.description = self.description or attrs_dict["content"].strip()
+            if name == "og:title" and attrs_dict.get("content"):
+                self.open_graph_title = attrs_dict["content"].strip()
+            if name in {"og:image", "og:image:url", "twitter:image", "twitter:image:src"} and attrs_dict.get("content"):
+                self.open_graph_image = self.open_graph_image or attrs_dict["content"].strip()
+            if name == "og:image:width" and attrs_dict.get("content"):
+                self.open_graph_image_width = attrs_dict["content"].strip()
+            if name == "og:image:height" and attrs_dict.get("content"):
+                self.open_graph_image_height = attrs_dict["content"].strip()
         if lowered == "link":
             rel = (attrs_dict.get("rel") or "").lower()
             if "canonical" in rel and attrs_dict.get("href"):
                 self.canonical_url = attrs_dict["href"].strip()
+        if lowered == "img" and self._main_depth:
+            source = attrs_dict.get("src") or attrs_dict.get("data-src") or attrs_dict.get("data-original")
+            if source and len(self.images) < 4:
+                self.images.append(
+                    {
+                        "url": source.strip(),
+                        "type": "image",
+                        "source": "article_image",
+                        "alt": (attrs_dict.get("alt") or "").strip(),
+                        "width": attrs_dict.get("width"),
+                        "height": attrs_dict.get("height"),
+                    }
+                )
         if lowered in {"p", "div", "section", "article", "main", "br", "li", "h1", "h2", "h3", "h4"}:
             self._append("\n")
 
@@ -118,13 +147,35 @@ class WebConnector(BaseConnector):
         parser.close()
 
         canonical_url = urljoin(fetched_url, parser.canonical_url) if parser.canonical_url else fetched_url
-        title = " ".join(parser.title.split()) or urlparse(canonical_url).path.strip("/") or canonical_url
+        title = " ".join((parser.open_graph_title or parser.title).split()) or urlparse(canonical_url).path.strip("/") or canonical_url
         author_handle = _domain_handle(canonical_url)
         author = parser.author or author_handle
         text = parser.text_content() or title
         external_id = sha1(canonical_url.encode("utf-8")).hexdigest()[:12]
         fetched_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         markdown = f"# {title}\n\n- Source: {canonical_url}\n- Author: {author}\n\n{text}\n"
+        assets: list[dict] = []
+        seen_urls: set[str] = set()
+        if parser.open_graph_image:
+            image_url = urljoin(fetched_url, parser.open_graph_image)
+            assets.append(
+                {
+                    "url": image_url,
+                    "type": "image",
+                    "source": "open_graph",
+                    "width": parser.open_graph_image_width,
+                    "height": parser.open_graph_image_height,
+                }
+            )
+            seen_urls.add(image_url)
+        for image in parser.images:
+            image_url = urljoin(fetched_url, image["url"])
+            if image_url in seen_urls or not image_url.startswith(("http://", "https://")):
+                continue
+            asset = dict(image)
+            asset["url"] = image_url
+            assets.append(asset)
+            seen_urls.add(image_url)
 
         return NormalizedDocument(
             source_type="web",
@@ -138,9 +189,10 @@ class WebConnector(BaseConnector):
             language=None,
             text=text,
             markdown=markdown,
-            summary=None,
-            metadata={"platform": "web", "content_type": content_type},
+            summary=parser.description,
+            assets=assets,
+            metadata={"platform": "web", "content_type": content_type, "description": parser.description},
             lineage={"fetched_at": fetched_at, "connector": "web", "runtime_version": "0.2.0"},
             capture_status="partial",
-            content_kinds=["text", "metadata"],
+            content_kinds=["text", "metadata"] + (["images"] if assets else []),
         )

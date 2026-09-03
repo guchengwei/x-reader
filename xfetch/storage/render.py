@@ -134,7 +134,8 @@ def render_bundle_page(bundle_dir: Path, site_root: Path, public_url: str | None
     page_path = site_root / "d" / slug / "index.html"
     page_path.parent.mkdir(parents=True, exist_ok=True)
 
-    title = html.escape(document.get("title") or slug)
+    card = document.get("card") if isinstance(document.get("card"), dict) else {}
+    title = html.escape(card.get("title") or document.get("title") or slug)
     canonical_url = document.get("canonical_url") or ""
     author_handle = document.get("author_handle") or "unknown"
     created_at = document.get("created_at") or "unknown"
