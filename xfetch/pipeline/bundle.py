@@ -13,6 +13,7 @@ from urllib.request import Request
 from xfetch.config import RuntimeConfig
 from xfetch.models import NormalizedDocument, document_to_dict
 from xfetch.net import safe_urlopen
+from xfetch.pipeline.card import VisualGenerator, enrich_card
 
 
 def slugify(text: str) -> str:
@@ -83,6 +84,8 @@ def _materialize_assets(doc: NormalizedDocument, assets_dir: Path) -> None:
 
         updated_asset = dict(asset)
         updated_asset["local_path"] = local_path
+        if content_type:
+            updated_asset["captured_content_type"] = content_type.split(";", 1)[0].strip().lower()
         updated_assets.append(updated_asset)
         if doc.markdown:
             doc.markdown = doc.markdown.replace(url, local_path)
@@ -111,7 +114,27 @@ def _replace_bundle(temp_dir: Path, bundle_dir: Path) -> None:
             shutil.rmtree(backup_dir)
 
 
-def write_bundle(doc: NormalizedDocument, config: RuntimeConfig) -> Path:
+def _fallback_card(doc: NormalizedDocument, error: Exception) -> None:
+    title = " ".join(str(doc.title or "").split()) or f"Saved {doc.source_type} bookmark {doc.external_id}"
+    opening_source = doc.summary or doc.text or title
+    opening = " ".join(str(opening_source).split())[:200].rstrip() or title
+    original = str(doc.markdown or doc.text or "").lstrip()
+    original = re.sub(r"^#\s+[^\n]+\n*", "", original, count=1)
+    doc.card = {"title": title, "opening": opening, "visual_kind": "text"}
+    doc.markdown = f"# {title}\n\n{opening}\n"
+    if original:
+        doc.markdown += f"\n## Captured content\n\n{original.rstrip()}\n"
+    doc.metadata["card_enrichment"] = {
+        "status": "partial",
+        "error": f"{type(error).__name__}: {str(error)[:160]}",
+    }
+
+
+def write_bundle(
+    doc: NormalizedDocument,
+    config: RuntimeConfig,
+    visual_generator: VisualGenerator | None = None,
+) -> Path:
     month = bundle_month(doc.created_at, doc.lineage.get("fetched_at"))
     slug = build_slug(doc.source_type, doc.external_id, doc.author_handle)
     month_dir = config.content_root / month
@@ -123,6 +146,10 @@ def write_bundle(doc: NormalizedDocument, config: RuntimeConfig) -> Path:
 
     try:
         _materialize_assets(doc, assets_dir)
+        try:
+            enrich_card(doc, temp_dir, visual_generator=visual_generator)
+        except Exception as exc:
+            _fallback_card(doc, exc)
 
         (temp_dir / "document.json").write_text(
             json.dumps(document_to_dict(doc), ensure_ascii=False, indent=2) + "\n",

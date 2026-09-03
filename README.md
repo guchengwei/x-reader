@@ -43,6 +43,12 @@ content-out/YYYY-MM/<slug>/
 
 `content_kinds` describes captured material such as `text`, `images`, `transcript`, `metadata`, and `thumbnail`.
 
+Every newly written bundle also includes a presentation-safe `card` object in `document.json`. `title` and `opening` are always present. When a suitable captured image exists, `image` points to its bundle-local path under `assets/`; otherwise the card remains text-only unless the caller supplies an optional visual generator. Source images are preferred over generated visuals, and invalid, tiny, logo/avatar, tracking, missing, or path-traversing candidates are not selected.
+
+`index.md` is normalized as a detail-page document: its first blocks are the card title as an H1 and the card opening, followed by source details and the preserved captured body. Card enrichment is failure-isolated from capture and publication. A generator error is recorded under `metadata.card_enrichment`, while the bundle is still written with a text card and its original capture status.
+
+Python callers that already have an image provider can pass a `VisualGenerator` to `write_bundle`. The provider receives a `VisualRequest` only when no suitable source visual exists. Diagram requests are limited to content with a process, hierarchy, architecture, comparison, or multi-component structure; other requests are text-free covers. There is no required provider dependency and the CLI does not make unconditional model calls.
+
 Asset download failures are not silently ignored: the affected asset records a `capture_error`, `asset_capture_failures` is added to metadata, and a `complete` document is downgraded to `partial`.
 
 ## Supported source families
