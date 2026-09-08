@@ -2,7 +2,67 @@
 
 Chat-first link preservation runtime.
 
-xfetch turns supported public URLs into portable content bundles and can publish those bundles into a separate content repository for durable static hosting. It is intentionally narrower than its upstream lineage: xfetch is a capture/preservation engine, not a universal reader, inbox, MCP product, search tool, or analysis suite.
+xfetch turns supported public URLs into portable content bundles and can publish those bundles into a separate content repository for durable static hosting. It is intentionally focused: xfetch is a capture/preservation engine, not a universal reader, inbox, MCP product, search tool, or analysis suite.
+
+## Install as a Codex or Claude Code skill
+
+The installer supports macOS, Linux, and WSL. Start with a clean environment that has Codex or Claude Code installed and either `curl` or `wget`; it bootstraps a user-local `uv`/Python 3.12 runtime when needed. It does not require Git, global `pip`, `sudo`, or shell-profile edits. It resolves one immutable source revision and uses the same archive for the runtime and skill.
+
+Download the installer before running it so a network failure cannot turn into a successful empty shell script. Set `XFETCH_AGENT` to the host where the skill should be installed:
+
+```bash
+XFETCH_AGENT=codex  # use claude for Claude Code, or both for both hosts
+XFETCH_INSTALL_SCRIPT="$(mktemp)"
+curl -fsSL https://raw.githubusercontent.com/guchengwei/xfetch/main/scripts/install.sh -o "$XFETCH_INSTALL_SCRIPT" &&
+  sh "$XFETCH_INSTALL_SCRIPT" --agent "$XFETCH_AGENT"
+XFETCH_INSTALL_STATUS=$?
+rm -f -- "$XFETCH_INSTALL_SCRIPT"
+test "$XFETCH_INSTALL_STATUS" -eq 0
+```
+
+If `curl` is unavailable, use `wget` for the download step:
+
+```bash
+XFETCH_AGENT=codex  # use claude or both as above
+XFETCH_INSTALL_SCRIPT="$(mktemp)"
+wget -qO "$XFETCH_INSTALL_SCRIPT" https://raw.githubusercontent.com/guchengwei/xfetch/main/scripts/install.sh &&
+  sh "$XFETCH_INSTALL_SCRIPT" --agent "$XFETCH_AGENT"
+XFETCH_INSTALL_STATUS=$?
+rm -f -- "$XFETCH_INSTALL_SCRIPT"
+test "$XFETCH_INSTALL_STATUS" -eq 0
+```
+
+The installer keeps the runtime under `~/.local/share/xfetch`, copies the skill to `~/.agents/skills/xfetch` for Codex and/or `~/.claude/skills/xfetch` for Claude Code, and writes `INSTALLATION.md` beside each installed `SKILL.md`. That file records the absolute executable path, the default `~/xfetch-content` archive location, and the installed revision. The managed runtime records its revision and executable checksum in `.xfetch-runtime`. The skill uses the recorded executable directly, so it works from any directory without activating a virtual environment or adding a directory to `PATH`.
+
+To let an agent perform the installation, give it this request and select the intended host explicitly:
+
+```text
+Install xfetch for [Codex / Claude Code / both] by following the installation instructions at https://github.com/guchengwei/xfetch#install-as-a-codex-or-claude-code-skill. Run the official installer with the matching --agent value, read the generated INSTALLATION.md, verify the recorded absolute executable, and report the installed paths and revision.
+```
+
+After installation, start a new Codex or Claude Code session if the current session loaded its skill list before installation. In Codex, invoke `$xfetch`; in Claude Code, invoke `/xfetch`. Natural-language requests such as “save this URL locally: https://example.com/” also select the skill when automatic discovery is enabled.
+
+For a local request, the skill uses `ingest` and writes to the first available location in this order: a destination explicitly requested by the user, `XFETCH_CONTENT_ROOT`, or `~/xfetch-content`. The skill passes that location explicitly, so direct CLI callers keep their existing `content-out` default. Local ingest does not publish, even when publication variables are present in the environment. Use `save` only when publication is intended and a target repository, owner, and name have been configured.
+
+The installed skill's default local operation is equivalent to:
+
+```bash
+"<absolute xfetch executable from INSTALLATION.md>" ingest "https://example.com/" \
+  --content-root "$HOME/xfetch-content" \
+  --json
+```
+
+Each local capture is a bundle containing `document.json`, `index.md`, `publish.json`, and `assets/`. A successful publication adds `publication.json`. `document.json` records whether the capture is `complete`, `partial`, or `metadata_only`; the agent should report that status and any recorded limitation instead of presenting a partial capture as complete. A command failure exits non-zero and is not a successful capture.
+
+If installation stops because an existing destination is modified or conflicts with the requested revision, preserve that installation, inspect the skill's `INSTALLATION.md` or the runtime's `.xfetch-runtime`, and resolve the conflict before retrying. To remove an installation, first verify each skill path against its `INSTALLATION.md`, the runtime against `.xfetch-runtime`, and every path against the installer-managed marker (`.xfetch-managed` containing `xfetch-installer-managed-v1`). Confirm that the copies contain no user files, then remove only the verified runtime and skill paths:
+
+```bash
+rm -rf -- "$HOME/.local/share/xfetch"
+rm -rf -- "$HOME/.agents/skills/xfetch"
+rm -rf -- "$HOME/.claude/skills/xfetch"
+```
+
+This does not remove captures under `~/xfetch-content` or shared `uv`/Python resources. Do not remove either of those locations as part of xfetch uninstall. Re-run the same installer command to repair a missing skill. If the managed runtime executable or `.xfetch-runtime` is missing or modified, inspect and remove the verified runtime first; the installer will preserve an incomplete runtime rather than rebuild it automatically.
 
 ## Goal
 
@@ -76,11 +136,12 @@ This is a security boundary because xfetch is intended to sit behind an agent/ch
 
 ## CLI
 
-Install locally:
+For repository development, install the editable package separately from the user skill installer:
 
 ```bash
-pip install -e .[dev]
-xfetch --help
+python3 -m venv .venv
+.venv/bin/python -m pip install -e '.[dev]'
+.venv/bin/xfetch --help
 ```
 
 ### Save
@@ -94,14 +155,16 @@ python -m xfetch save "https://x.com/jack/status/20" --json
 With publication defaults:
 
 ```bash
-export XFETCH_TARGET_REPO='/Users/zion/link-vault-publish'
-export XFETCH_REPO_OWNER='guchengwei'
-export XFETCH_REPO_NAME='link-vault'
+export XFETCH_TARGET_REPO='/path/to/content-repo'
+export XFETCH_REPO_OWNER='owner'
+export XFETCH_REPO_NAME='content-repo'
 
-python -m xfetch save "https://example.com/article" \
+python -m xfetch save "https://example.com/" \
   --content-root ./content-out \
   --json
 ```
+
+Publication is optional. It requires an existing target checkout and the matching repository settings; hosting and deployment remain responsibilities of that target repository.
 
 Optional environment overrides:
 
@@ -128,7 +191,7 @@ JSON output includes capture quality plus publication state:
 ### Ingest
 
 ```bash
-python -m xfetch ingest "https://example.com/article" --json
+python -m xfetch ingest "https://example.com/" --json
 ```
 
 Writes a local bundle without publishing it.
@@ -162,10 +225,6 @@ For an existing remote branch, the target checkout must start exactly at `origin
 ## Rendering
 
 xfetch keeps a small dependency-free renderer for local preview/export. It handles headings, paragraphs, fenced code, images, ordered/unordered lists, blockquotes, links, inline code, and bold text. Publication does not copy rendered pages into the target repository; the normalized bundle remains the durable source of truth and the target owns presentation.
-
-## Upstream relationship
-
-This repository is a fork of `runesleo/x-reader`, but upstream product direction is not xfetch's specification. Upstream is useful as a source of hard-earned fetcher fixes and fallback behavior. Changes should be ported selectively when they improve xfetch's preservation contract; upstream inbox, MCP, skills, search, and general reader surfaces are intentionally out of scope.
 
 ## Development
 

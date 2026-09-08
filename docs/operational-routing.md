@@ -1,19 +1,21 @@
 # Operational routing
 
-Canonical save/publish path on this machine:
-- Hermes natural-language request (for example: `save this <url>`)
-- xfetch runtime
-- target working tree: `/Users/zion/link-vault-publish`
-- target repo/site: `guchengwei/link-vault`
+The installed host skill is the entry point for natural-language preservation requests:
 
-Rules:
-- Do not satisfy save/publish requests with x-reader.
-- Treat x-reader as legacy/reference tooling while connector migration is in progress.
-- Use xfetch as the only operational save/publish pipeline.
+- Codex `$xfetch` or Claude Code `/xfetch`
+- the absolute xfetch executable recorded in the installed skill's `INSTALLATION.md`
+- `ingest` for local capture, or `save` when publication was explicitly requested and configured
 
-Audit notes (2026-04-03):
-- xfetch package runtime is the canonical publish spine.
-- x-reader still exists as a broader reader, but it is no longer the active save/publish path.
-- xfetch connector coverage now includes: X, generic web, RSS, Telegram public URLs, WeChat, Xiaohongshu, YouTube, and Bilibili.
+For local capture, choose the content root in this order:
 
-Historical implementation plans and migration notes now live under `docs/archive/`.
+1. a destination explicitly requested by the user
+2. `XFETCH_CONTENT_ROOT`
+3. the installer reference's default, normally `~/xfetch-content`
+
+Pass the chosen root explicitly to `ingest`. This keeps local requests local even when publication variables were inherited from another shell. The direct CLI's default remains `content-out` outside the installed skill.
+
+For publication, use `save` only after the user has requested it and `XFETCH_TARGET_REPO`, `XFETCH_REPO_OWNER`, and `XFETCH_REPO_NAME` identify an existing target checkout. Publication output is valid only when the command reports success; preserve its `capture_status`, public URL, and revisions in the response.
+
+Each local bundle contains `document.json`, `index.md`, `publish.json`, and `assets/`; a successfully published bundle also contains `publication.json`. `complete`, `partial`, and `metadata_only` are meaningful capture states and must be reported accurately.
+
+Historical implementation plans and migration notes live under `docs/archive/`.

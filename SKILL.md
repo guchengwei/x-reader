@@ -9,13 +9,31 @@ description: >
 
 Use xfetch when the user wants to save or preserve the content behind a URL. xfetch is not a search tool, timeline reader, bookmark manager, or general-purpose browser.
 
+## Installed runtime
+
+When this skill is installed by the supported installer, `INSTALLATION.md` is beside this file. Read it before running xfetch. Use the absolute executable path recorded there for every invocation; do not depend on the current directory, an activated virtual environment, or `PATH`. The reference also records the default local archive location and installed revision.
+
+If `INSTALLATION.md` is missing or unreadable, stop and direct the user to the README installation section for the intended host (`codex`, `claude`, or `both`), then re-read the generated reference. Do not guess a Python module, activate an environment, or fall back to `PATH`.
+
 ## Canonical command
 
 ```bash
-python -m xfetch save "<url>" --json
+"<absolute xfetch executable>" ingest "<url>" \
+  --content-root "<explicit destination or XFETCH_CONTENT_ROOT or the INSTALLATION.md default>" \
+  --json
 ```
 
-When publish defaults are configured, `save` performs ingest + bundle creation + publication and returns the public URL. Without publish configuration it returns the local bundle path.
+For a normal preservation request, use `ingest` so inherited publication variables cannot publish unexpectedly. Choose the content root in this order: a destination explicitly requested by the user, `XFETCH_CONTENT_ROOT`, then the default recorded in `INSTALLATION.md` (normally `~/xfetch-content`). Pass the selected path explicitly. The direct CLI default remains `content-out` outside the installed skill.
+
+## Publication command
+
+Use `save` when the user intends publication and the target repository settings are configured:
+
+```bash
+"<absolute xfetch executable>" save "<url>" --json
+```
+
+When publish defaults are configured, `save` performs ingest, bundle creation, and publication, then returns the public URL. Without publish configuration it returns the local bundle path.
 
 Publish defaults:
 
@@ -27,15 +45,19 @@ export XFETCH_REPO_NAME='repo'
 
 Optional overrides: `XFETCH_BRANCH`, `XFETCH_CONTENT_SUBDIR`, `XFETCH_CONTENT_ROOT`.
 
+## Local versus publication requests
+
+Publication requires `XFETCH_TARGET_REPO`, `XFETCH_REPO_OWNER`, and `XFETCH_REPO_NAME` (with optional branch and subdirectory overrides); report the returned `public_url` and revisions only when the command reports success. Do not configure or publish to a target merely because one exists in the environment.
+
 ## Other commands
 
 ```bash
-python -m xfetch ingest "<url>" --json
-python -m xfetch sync <bundle-dir> --target-repo <repo> --repo-owner <owner> --repo-name <name> --json
-python -m xfetch publish <bundle-dir> --target-repo <repo> --repo-owner <owner> --repo-name <name> --json
+"<absolute xfetch executable>" ingest "<url>" --content-root "<root>" --json
+"<absolute xfetch executable>" sync <bundle-dir> --target-repo <repo> --repo-owner <owner> --repo-name <name> --json
+"<absolute xfetch executable>" publish <bundle-dir> --target-repo <repo> --repo-owner <owner> --repo-name <name> --json
 ```
 
-Use `ingest` only when a local bundle is desired without publication. `sync` prepares a target working tree without committing. `publish` publishes an existing bundle. Publication copies durable bundle content only; the target repository owns rendering/presentation.
+Use `sync` to prepare a target working tree without committing. Use `publish` for an existing bundle when publication is explicitly requested. Publication copies durable bundle content only; the target repository owns rendering and presentation.
 
 ## Result semantics
 
@@ -66,6 +88,10 @@ After publication, `publication.json` records the content commit revision and pu
 YouTube caption tracks can be advertised but inaccessible without additional playback tokens; keep those results `metadata_only` and report the recorded capture limitation. Bilibili subtitles that require login likewise remain `metadata_only`.
 
 If WeChat returns a verification page or Xiaohongshu returns a login wall, report the fetch failure rather than saving the interstitial as content.
+
+## Capture results
+
+Keep the reported `capture_status` and `content_kinds` in the response. A `partial` or `metadata_only` result is still a useful output when the bundle exists, but must be described with its limitation. If the CLI exits non-zero, report the failure and do not claim that the URL was saved.
 
 ## Safety
 
